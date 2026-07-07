@@ -29,12 +29,30 @@ tmp=$(mktemp -d); printf 'open_mode = "tab"\n' >"$tmp/config.toml"
 check "open_mode tab from config" "tab" "$(HERDR_PLUGIN_CONFIG_DIR=$tmp open_mode)"
 rm -rf "$tmp"
 
+# fzf_theme: default user (inherit), clean from config
+check "fzf_theme default user" "user" "$(HERDR_PLUGIN_CONFIG_DIR=/nonexistent fzf_theme)"
+tmp=$(mktemp -d); printf 'fzf_theme = "clean"\n' >"$tmp/config.toml"
+check "fzf_theme clean from config" "clean" "$(HERDR_PLUGIN_CONFIG_DIR=$tmp fzf_theme)"
+rm -rf "$tmp"
+
 # pr_number_from_url: valid
 check "pr url valid" "42" "$(pr_number_from_url 'https://github.com/o/r/pull/42')"
 # pr_number_from_url: rejects non-PR / wrong host / trailing path
 pr_number_from_url 'https://github.com/o/r/issues/42' >/dev/null; check "pr url rejects issues" "1" "$?"
 pr_number_from_url 'https://evil.com/o/r/pull/42'     >/dev/null; check "pr url rejects host"   "1" "$?"
 pr_number_from_url 'https://github.com/o/r/pull/42/files' >/dev/null; check "pr url rejects suffix" "1" "$?"
+
+# herdr_ws_id_for_path: maps a gwm path (trailing slash) to herdr's open ws id,
+# normalizing the trailing-slash mismatch (gwm ".../a/" vs herdr ".../a").
+wtlist='{"result":{"worktrees":[{"path":"/repo","open_workspace_id":"w1"},{"path":"/repo/wt/a","open_workspace_id":"w9"}]}}'
+check "ws id: gwm trailing slash maps to herdr id" "w9" \
+  "$(printf '%s' "$wtlist" | herdr_ws_id_for_path '/repo/wt/a/')"
+check "ws id: no path match is empty" "" \
+  "$(printf '%s' "$wtlist" | herdr_ws_id_for_path '/repo/wt/nope')"
+# present but not open (no open_workspace_id field) → empty, so we adopt instead
+wtlist2='{"result":{"worktrees":[{"path":"/repo/wt/b"}]}}'
+check "ws id: present but not open is empty" "" \
+  "$(printf '%s' "$wtlist2" | herdr_ws_id_for_path '/repo/wt/b')"
 
 # Source-level guardrail: no script may create a worktree on the herdr side.
 # Scan only existing dirs (bin/ arrives in phase 1) and skip comment lines — the
