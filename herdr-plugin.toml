@@ -1,0 +1,50 @@
+id = "gwm"
+name = "gwm worktrees"
+version = "0.1.0"
+min_herdr_version = "0.7.0"
+description = "Create, switch, and remove git worktrees with gwm — gwm stays the source of truth, herdr adopts."
+platforms = ["macos", "linux"]
+
+# Each action opens a picker pane (fzf needs a TTY). The pane script runs fzf,
+# calls gwm, then ADOPTS the resulting worktree via `herdr worktree open --path`.
+# --cwd = the current repo (from the injected context JSON); without it the
+# scripts would run in the plugin dir, not the repo you're in.
+# NB: gwm is the source of truth — see PLAN.md §0. Never `herdr worktree create`.
+
+[[actions]]
+id = "create"
+title = "gwm: create worktree"
+contexts = ["workspace", "global"]
+command = ["bash", "-c", "cwd=$(jq -r '.workspace_cwd // .focused_pane_cwd // empty' <<<\"$HERDR_PLUGIN_CONTEXT_JSON\"); exec \"$HERDR_BIN_PATH\" plugin pane open --plugin \"$HERDR_PLUGIN_ID\" --entrypoint creator --placement split --direction down --cwd \"${cwd:-$PWD}\" --focus"]
+
+[[actions]]
+id = "switch"
+title = "gwm: switch worktree"
+contexts = ["workspace", "global"]
+command = ["bash", "-c", "cwd=$(jq -r '.workspace_cwd // .focused_pane_cwd // empty' <<<\"$HERDR_PLUGIN_CONTEXT_JSON\"); exec \"$HERDR_BIN_PATH\" plugin pane open --plugin \"$HERDR_PLUGIN_ID\" --entrypoint picker --placement split --direction down --cwd \"${cwd:-$PWD}\" --focus"]
+
+[[actions]]
+id = "remove"
+title = "gwm: remove worktree"
+contexts = ["workspace"]
+command = ["bash", "-c", "cwd=$(jq -r '.workspace_cwd // .focused_pane_cwd // empty' <<<\"$HERDR_PLUGIN_CONTEXT_JSON\"); exec \"$HERDR_BIN_PATH\" plugin pane open --plugin \"$HERDR_PLUGIN_ID\" --entrypoint remover --placement split --direction down --cwd \"${cwd:-$PWD}\" --focus"]
+
+# Picker panes — implemented in phase 1 (bin/*.sh). The manifest links even before
+# the scripts exist; `plugin action invoke` needs them present.
+[[panes]]
+id = "creator"
+title = "gwm — create"
+placement = "split"
+command = ["bash", "-c", "exec bash \"$HERDR_PLUGIN_ROOT/bin/create.sh\""]
+
+[[panes]]
+id = "picker"
+title = "gwm — switch"
+placement = "split"
+command = ["bash", "-c", "exec bash \"$HERDR_PLUGIN_ROOT/bin/switch.sh\""]
+
+[[panes]]
+id = "remover"
+title = "gwm — remove"
+placement = "split"
+command = ["bash", "-c", "exec bash \"$HERDR_PLUGIN_ROOT/bin/remove.sh\""]
