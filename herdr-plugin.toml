@@ -1,6 +1,6 @@
 id = "gwm"
 name = "gwm worktrees"
-version = "0.1.0"
+version = "0.2.0"
 min_herdr_version = "0.7.0"
 description = "Drive gwm for git worktree management from herdr — create, switch, remove, review PRs, bootstrap, exec, clean. gwm stays the source of truth; herdr adopts."
 platforms = ["macos", "linux"]
