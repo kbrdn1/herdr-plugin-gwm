@@ -57,7 +57,7 @@ description = "gwm: switch worktree"
 - **`gwm.remove`** — fzf over removable worktrees (never the main checkout) → an explicit **confirm gate** (gwm's `remove` doesn't prompt) → `gwm remove` (branch kept, so the work stays recoverable) → `workspace close` to keep the sidebar in sync.
 - **Adopt-only guardrail** — every mutation goes through `gwm`; herdr is a reflection. A source-level test asserts no script ever emits `worktree create` or `worktree open --branch` (see [tests](#testing)).
 - **Root-workspace adoption** — adopts under the repo's *root* workspace, so invoking from inside a linked-worktree pane doesn't hit herdr's `linked_worktree_source` rejection.
-- **Picker isolation** — pickers run with a clean `FZF_DEFAULT_OPTS`, so a file-browser-oriented global fzf config (a `bat` preview, `ctrl-r` bound to `git ls-files`) can't garble non-file lines or rebind keys.
+- **Picker theming** — pickers inherit your `FZF_DEFAULT_OPTS` (colors, borders) by default, but neutralize file-browser-oriented bits (a `bat` preview, `ctrl-r` bound to `git ls-files`, `transform-header` on focus) that would garble non-file lines or rebind keys. Set `fzf_theme = "clean"` for a fully isolated picker.
 
 ## configuration
 
@@ -67,6 +67,12 @@ Presentation mode lives in the herdr-managed config dir — create `~/.config/he
 # "workspace" (default) → adopt as a nested worktree workspace in the sidebar.
 # "tab"                 → lighter: open a tab with the worktree cwd.
 open_mode = "workspace"
+
+# "user" (default) → inherit your FZF_DEFAULT_OPTS (colors/theme); the picker
+#                    only neutralizes file-browser bits (bat preview, ctrl-r →
+#                    git ls-files, transform-header on focus).
+# "clean"          → drop FZF_DEFAULT_OPTS entirely for a bare, predictable picker.
+fzf_theme = "user"
 ```
 
 ## the one rule

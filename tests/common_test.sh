@@ -29,6 +29,12 @@ tmp=$(mktemp -d); printf 'open_mode = "tab"\n' >"$tmp/config.toml"
 check "open_mode tab from config" "tab" "$(HERDR_PLUGIN_CONFIG_DIR=$tmp open_mode)"
 rm -rf "$tmp"
 
+# fzf_theme: default user (inherit), clean from config
+check "fzf_theme default user" "user" "$(HERDR_PLUGIN_CONFIG_DIR=/nonexistent fzf_theme)"
+tmp=$(mktemp -d); printf 'fzf_theme = "clean"\n' >"$tmp/config.toml"
+check "fzf_theme clean from config" "clean" "$(HERDR_PLUGIN_CONFIG_DIR=$tmp fzf_theme)"
+rm -rf "$tmp"
+
 # pr_number_from_url: valid
 check "pr url valid" "42" "$(pr_number_from_url 'https://github.com/o/r/pull/42')"
 # pr_number_from_url: rejects non-PR / wrong host / trailing path
