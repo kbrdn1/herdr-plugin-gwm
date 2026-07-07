@@ -2,14 +2,14 @@ id = "gwm"
 name = "gwm worktrees"
 version = "0.1.0"
 min_herdr_version = "0.7.0"
-description = "Create, switch, and remove git worktrees with gwm — gwm stays the source of truth, herdr adopts."
+description = "Drive gwm for git worktree management from herdr — create, switch, remove, review PRs, bootstrap, exec, clean. gwm stays the source of truth; herdr adopts."
 platforms = ["macos", "linux"]
 
-# Each action opens a picker pane (fzf needs a TTY). The pane script runs fzf,
-# calls gwm, then ADOPTS the resulting worktree via `herdr worktree open --path`.
+# Each action opens a picker/pane (fzf needs a TTY). The pane script runs gwm,
+# then ADOPTS the resulting worktree via `herdr worktree open --path`.
 # --cwd = the current repo (from the injected context JSON); without it the
 # scripts would run in the plugin dir, not the repo you're in.
-# NB: gwm is the source of truth — see PLAN.md §0. Never `herdr worktree create`.
+# NB: gwm is the source of truth — see PLAN.md §0. herdr only reflects.
 
 [[actions]]
 id = "create"
@@ -29,8 +29,37 @@ title = "gwm: remove worktree"
 contexts = ["workspace"]
 command = ["bash", "-c", "cwd=$(jq -r '.workspace_cwd // .focused_pane_cwd // empty' <<<\"$HERDR_PLUGIN_CONTEXT_JSON\"); exec \"$HERDR_BIN_PATH\" plugin pane open --plugin \"$HERDR_PLUGIN_ID\" --entrypoint remover --placement split --direction down --cwd \"${cwd:-$PWD}\" --focus"]
 
-# Picker panes — implemented in phase 1 (bin/*.sh). The manifest links even before
-# the scripts exist; `plugin action invoke` needs them present.
+# review: interactive (fzf over `gh pr list`) OR triggered by a clicked PR URL.
+# On a link click the context carries `clicked_url`; we forward it to the pane
+# via --env so review.sh extracts the PR number itself (strict validation in
+# lib/common.sh::pr_number_from_url — the number goes to gwm, never a raw URL).
+[[actions]]
+id = "review"
+title = "gwm: review a PR"
+contexts = ["workspace", "global"]
+command = ["bash", "-c", "cwd=$(jq -r '.workspace_cwd // .focused_pane_cwd // empty' <<<\"$HERDR_PLUGIN_CONTEXT_JSON\"); url=$(jq -r '.clicked_url // empty' <<<\"$HERDR_PLUGIN_CONTEXT_JSON\"); exec \"$HERDR_BIN_PATH\" plugin pane open --plugin \"$HERDR_PLUGIN_ID\" --entrypoint reviewer --placement split --direction down --cwd \"${cwd:-$PWD}\" --env \"GWM_REVIEW_URL=$url\" --focus"]
+
+[[actions]]
+id = "exec"
+title = "gwm: exec across worktrees"
+contexts = ["workspace", "global"]
+command = ["bash", "-c", "cwd=$(jq -r '.workspace_cwd // .focused_pane_cwd // empty' <<<\"$HERDR_PLUGIN_CONTEXT_JSON\"); exec \"$HERDR_BIN_PATH\" plugin pane open --plugin \"$HERDR_PLUGIN_ID\" --entrypoint executor --placement split --direction down --cwd \"${cwd:-$PWD}\" --focus"]
+
+[[actions]]
+id = "clean"
+title = "gwm: clean build artifacts"
+contexts = ["workspace", "global"]
+command = ["bash", "-c", "cwd=$(jq -r '.workspace_cwd // .focused_pane_cwd // empty' <<<\"$HERDR_PLUGIN_CONTEXT_JSON\"); exec \"$HERDR_BIN_PATH\" plugin pane open --plugin \"$HERDR_PLUGIN_ID\" --entrypoint cleaner --placement split --direction down --cwd \"${cwd:-$PWD}\" --focus"]
+
+# dashboard: the live worktree view IS gwm's TUI (PR/CI/diff badges, fed by its
+# own daemon). We just surface it in a pane rather than reimplement it.
+[[actions]]
+id = "dashboard"
+title = "gwm: dashboard (TUI)"
+contexts = ["workspace", "global"]
+command = ["bash", "-c", "cwd=$(jq -r '.workspace_cwd // .focused_pane_cwd // empty' <<<\"$HERDR_PLUGIN_CONTEXT_JSON\"); exec \"$HERDR_BIN_PATH\" plugin pane open --plugin \"$HERDR_PLUGIN_ID\" --entrypoint dashboard --placement zoomed --cwd \"${cwd:-$PWD}\" --focus"]
+
+# Panes — the entrypoints the actions above open.
 [[panes]]
 id = "creator"
 title = "gwm — create"
@@ -48,3 +77,43 @@ id = "remover"
 title = "gwm — remove"
 placement = "split"
 command = ["bash", "-c", "exec bash \"$HERDR_PLUGIN_ROOT/bin/remove.sh\""]
+
+[[panes]]
+id = "reviewer"
+title = "gwm — review PR"
+placement = "split"
+command = ["bash", "-c", "exec bash \"$HERDR_PLUGIN_ROOT/bin/review.sh\""]
+
+[[panes]]
+id = "executor"
+title = "gwm — exec"
+placement = "split"
+command = ["bash", "-c", "exec bash \"$HERDR_PLUGIN_ROOT/bin/exec.sh\""]
+
+[[panes]]
+id = "cleaner"
+title = "gwm — clean"
+placement = "split"
+command = ["bash", "-c", "exec bash \"$HERDR_PLUGIN_ROOT/bin/clean.sh\""]
+
+[[panes]]
+id = "dashboard"
+title = "gwm — dashboard"
+placement = "zoomed"
+command = ["bash", "-c", "exec gwm"]
+
+# Clicking a GitHub PR URL materializes it as a review worktree. The regex is
+# anchored (^…$); review.sh re-validates and passes only the extracted number
+# to gwm — a forged URL in a log can't smuggle anything past it.
+[[link_handlers]]
+id = "github-pr"
+title = "gwm: review this PR"
+pattern = "^https://github\\.com/[^/]+/[^/]+/pull/[0-9]+$"
+action = "review"
+
+# When a worktree is created on the herdr side (native, outside gwm), enrich it
+# by running gwm bootstrap on its path (.env copy, hooks, preset). Adopts done
+# by this plugin fire worktree.opened, not .created, so this never double-fires.
+[[events]]
+on = "worktree.created"
+command = ["bash", "-c", "exec bash \"$HERDR_PLUGIN_ROOT/bin/on_worktree_created.sh\""]

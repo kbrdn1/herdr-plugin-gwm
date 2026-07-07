@@ -63,6 +63,16 @@ herdr_ws_id_for_path() {
     2>/dev/null | head -n1
 }
 
+# Extract the worktree path from a herdr event payload (HERDR_PLUGIN_EVENT_JSON).
+# The exact field varies by herdr version, so try the likely ones. Pure/testable.
+#   $1 = event json (defaults to $HERDR_PLUGIN_EVENT_JSON)
+event_worktree_path() {
+  local json=${1:-${HERDR_PLUGIN_EVENT_JSON:-}}
+  [[ -n $json ]] || return 0
+  jq -r '.worktree.path // .path // .worktree_path // .cwd // .worktree.cwd // empty' \
+    <<<"$json" 2>/dev/null
+}
+
 # THE guardrail. Adopt an EXISTING worktree (already created by gwm) into herdr.
 # Uses only `worktree open --path` (or `tab create --cwd`) — never creates a
 # worktree on the herdr side.
