@@ -201,7 +201,7 @@ herdr ≥ 0.7.0 · `gwm` sur PATH · `jq` · `fzf` · `bash` · plateformes maco
 
 ## 4. Plan d'implémentation phasé (MVP d'abord)
 
-> **Statut (v0.1.0)** : phases 1-4 **implémentées** (create/switch/remove/review/exec/clean/dashboard + link_handler PR + event `worktree.created`). Seul reliquat : le mode multi-repo `gwm --workspace` n'est pas câblé dans les actions.
+> **Statut (v0.2.0)** : phases 1-4 **implémentées** (create/switch/remove/review/exec/clean/dashboard + link_handler PR + event `worktree.created`). Seul reliquat : le mode multi-repo `gwm --workspace` n'est pas câblé dans les actions.
 
 ### Phase 1 — MVP : create / switch / remove  ← commencer ici
 - [ ] `herdr-plugin.toml` : métadonnées + 3 actions (`create`, `switch`,
