@@ -29,13 +29,28 @@ open_mode() {
   case $mode in tab) printf tab ;; *) printf workspace ;; esac
 }
 
-# fzf for our pickers. Runs with a CLEAN FZF_DEFAULT_OPTS: a user's global opts
-# are often file-browser oriented (--preview 'bat {}', ctrl-r → git ls-files,
-# transform-header on focus) which garble our non-file lines and rebind keys.
-# We isolate from that and set only what the picker needs.
+# fzf theme mode: "user" (default, inherit the user's FZF_DEFAULT_OPTS) or
+# "clean" (drop it entirely). Same one-line-sed reader as open_mode.
+fzf_theme() {
+  local cfg="${HERDR_PLUGIN_CONFIG_DIR:-}/config.toml" mode=""
+  if [[ -f $cfg ]]; then
+    mode=$(sed -n 's/^[[:space:]]*fzf_theme[[:space:]]*=[[:space:]]*"\{0,1\}\([a-z]*\).*/\1/p' "$cfg" | head -n1)
+  fi
+  case $mode in clean) printf clean ;; *) printf user ;; esac
+}
+
+# fzf for our pickers. By default it INHERITS the user's FZF_DEFAULT_OPTS so
+# their theme (colors, borders) carries over, but neutralizes file-browser bits
+# that would garble our non-file lines or rebind keys: a `bat {}` preview,
+# transform-header/preview-label on focus, and ctrl-r → `git ls-files`. Our CLI
+# flags are applied last so they win over the inherited opts. `fzf_theme=clean`
+# drops the inherited opts entirely.
 wt_fzf() {
-  FZF_DEFAULT_OPTS='' fzf --no-preview --reverse --info=inline \
-    --border=rounded --margin=20%,30% "$@"
+  local opts=$FZF_DEFAULT_OPTS
+  [[ $(fzf_theme) == clean ]] && opts=''
+  FZF_DEFAULT_OPTS="$opts" fzf \
+    --no-preview --bind 'focus:ignore' --bind 'ctrl-r:ignore' --header-label ' gwm ' \
+    --reverse --info=inline --border=rounded --margin=20%,30% "$@"
 }
 
 # Given a worktree path, print herdr's open_workspace_id for it (empty if not
