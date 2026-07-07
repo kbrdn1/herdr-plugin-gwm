@@ -5,7 +5,7 @@
 [![gwm](https://img.shields.io/badge/gwm-1.0-orange)](https://github.com/kbrdn1/gwm-cli)
 [![shell](https://img.shields.io/badge/bash-glue--only-4EAA25?logo=gnubash&logoColor=white)](bin/)
 
-A [herdr](https://herdr.dev) plugin that drives **[gwm](https://github.com/kbrdn1/gwm-cli)** for git worktree management from inside the multiplexer. Pick / create / remove worktrees through fzf, and herdr reflects each one as a workspace.
+A [herdr](https://herdr.dev) plugin that drives **[gwm](https://github.com/kbrdn1/gwm-cli)** for git worktree management from inside the multiplexer: create, switch, remove, review a PR, exec across worktrees, clean build artifacts, and a live dashboard. herdr reflects each worktree as a workspace.
 
 **gwm stays the single source of truth.** The plugin never creates a worktree on the herdr side — it only *adopts* what gwm produced (`worktree open --path`) and closes the reflection when gwm removes it (`workspace close`). One source of truth, no divergence. See [the one rule](#the-one-rule).
 
@@ -23,8 +23,8 @@ A [herdr](https://herdr.dev) plugin that drives **[gwm](https://github.com/kbrdn
 
 | Channel | Command |
 |:--------|:--------|
+| Marketplace | `herdr plugin install kbrdn1/herdr-plugin-gwm` |
 | Dev (local checkout) | `herdr plugin link "$PWD"` |
-| Marketplace (once released) | `herdr plugin install kbrdn1/herdr-plugin-gwm` |
 
 There is no `[[build]]` step — it's plain bash, so `plugin link` and `plugin install` both wire it up with nothing to compile.
 
@@ -35,9 +35,13 @@ There is no `[[build]]` step — it's plain bash, so `plugin link` and `plugin i
 From any pane inside a herdr workspace that sits in a gwm-managed repo:
 
 ```bash
-herdr plugin action invoke gwm.switch    # fzf over gwm worktrees → focus if open, else adopt
-herdr plugin action invoke gwm.create    # branch type → issue → desc → gwm create → adopt
-herdr plugin action invoke gwm.remove    # fzf → confirm → gwm remove → close the reflection
+herdr plugin action invoke gwm.switch      # fzf over gwm worktrees → focus if open, else adopt
+herdr plugin action invoke gwm.create      # branch type → issue → desc → gwm create → adopt
+herdr plugin action invoke gwm.remove      # fzf → confirm → gwm remove → close the reflection
+herdr plugin action invoke gwm.review      # fzf over `gh pr list` → gwm review → adopt
+herdr plugin action invoke gwm.exec        # run a command across every worktree
+herdr plugin action invoke gwm.clean       # report reclaimable artifacts → confirm → delete
+herdr plugin action invoke gwm.dashboard   # gwm's live TUI in a pane
 ```
 
 Bind them to a key in `~/.config/herdr/config.toml` (then `herdr server reload-config`):
@@ -55,6 +59,10 @@ description = "gwm: switch worktree"
 - **`gwm.create`** — fzf over `gwm types` (branch type) → issue number → description → runs `gwm create`, then resolves the new worktree by its **linked issue** (immune to description normalization; falls back to a fuzzy path lookup) and adopts it into herdr.
 - **`gwm.switch`** — fzf over `gwm list --format=json` with live **badges** (issue `#N`, `PR#N`, dirty `±`, ahead `↑`, behind `↓`). If herdr already reflects the pick it just **focuses** the workspace; otherwise it **adopts** it — no duplicate workspaces.
 - **`gwm.remove`** — fzf over removable worktrees (never the main checkout) → an explicit **confirm gate** (gwm's `remove` doesn't prompt) → `gwm remove` (branch kept, so the work stays recoverable) → `workspace close` to keep the sidebar in sync.
+- **`gwm.review`** — fzf over `gh pr list` (or a plain PR-number prompt) → `gwm review <N>` materializes the PR as an isolated worktree → adopt. Also wired to a **link handler**: clicking a GitHub PR URL (`…/pull/N`) triggers it, passing the strictly-extracted PR *number* to gwm — never a raw or forged URL.
+- **`gwm.exec` / `gwm.clean`** — `gwm exec -- <cmd>` fans a command across every worktree with a `✓/✗` rollup; `gwm clean` reports reclaimable build artifacts (`target/`, `node_modules/`, …) and deletes only git-ignored ones after a confirm.
+- **`gwm.dashboard`** — surfaces gwm's own TUI in a zoomed pane: the live worktree table with PR/CI/dirty/ahead-behind badges, no reimplementation.
+- **`worktree.created` event** — a worktree created on the herdr side (outside gwm) is enriched by `gwm bootstrap` (`.env` copy, hooks, preset). Adopts fire `worktree.opened`, not `.created`, so this never double-runs on the plugin's own work.
 - **Adopt-only guardrail** — every mutation goes through `gwm`; herdr is a reflection. A source-level test asserts no script ever emits `worktree create` or `worktree open --branch` (see [tests](#testing)).
 - **Root-workspace adoption** — adopts under the repo's *root* workspace, so invoking from inside a linked-worktree pane doesn't hit herdr's `linked_worktree_source` rejection.
 - **Picker theming** — pickers inherit your `FZF_DEFAULT_OPTS` (colors, borders) by default, but neutralize file-browser-oriented bits (a `bat` preview, `ctrl-r` bound to `git ls-files`, `transform-header` on focus) that would garble non-file lines or rebind keys. Set `fzf_theme = "clean"` for a fully isolated picker.
@@ -99,7 +107,7 @@ $HERDR_BIN_PATH worktree open --path …     # herdr adopts (never creates)
 bash tests/common_test.sh    # pure-helper tests — no herdr/gwm instance needed
 ```
 
-Covers the pure logic: context-cwd fallback, `open_mode` resolution, PR-URL parsing (with forged-URL rejection), the gwm↔herdr path mapping (trailing-slash normalization), and the adopt-only guardrail.
+Covers the pure logic: context-cwd fallback, `open_mode` / `fzf_theme` resolution, PR-URL parsing (with forged-URL rejection), the gwm↔herdr path mapping (trailing-slash normalization), event-payload path extraction, and the adopt-only guardrail.
 
 Dev loop:
 
@@ -111,15 +119,11 @@ herdr plugin log list --plugin gwm         # startup errors land here
 herdr plugin unlink gwm && herdr plugin link "$PWD"
 ```
 
-## roadmap
+## design & reference
 
-Phase 1 (create / switch / remove) is shipped. Planned:
+See [PLAN.md](PLAN.md) for the full design rationale and the complete herdr plugin API / gwm surface reference.
 
-- **Phase 2 — GitHub / PR** — a `review` action (`gwm review <PR#>`) and a `link_handler` that turns a clicked GitHub PR URL into a materialized worktree (passing the extracted PR *number*, never the raw URL).
-- **Phase 3 — bootstrap & reverse direction** — enrich worktrees created outside gwm; document the gwm→herdr `post_create` hook.
-- **Phase 4 — live dashboard** — a pane fed by `gwm daemon` (subscribe) for live PR/CI/diff badges, plus `exec` / `clean` actions.
-
-See [PLAN.md](PLAN.md) for the full design and the complete herdr plugin API / gwm surface reference.
+Multi-repo `gwm --workspace` mode isn't wired through the actions yet — the plugin operates on the single repo of the current workspace. Everything else (create / switch / remove / review / exec / clean / dashboard / bootstrap-on-create) is implemented.
 
 ## license
 

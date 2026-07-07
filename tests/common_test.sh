@@ -54,6 +54,14 @@ wtlist2='{"result":{"worktrees":[{"path":"/repo/wt/b"}]}}'
 check "ws id: present but not open is empty" "" \
   "$(printf '%s' "$wtlist2" | herdr_ws_id_for_path '/repo/wt/b')"
 
+# event_worktree_path: pulls the path from an event payload, tolerating the
+# field name (.worktree.path / .path / .cwd), empty for none.
+check "event path from .worktree.path" "/wt/a" \
+  "$(event_worktree_path '{"worktree":{"path":"/wt/a"}}')"
+check "event path from .path" "/wt/b" "$(event_worktree_path '{"path":"/wt/b"}')"
+check "event path from .cwd" "/wt/c" "$(event_worktree_path '{"cwd":"/wt/c"}')"
+check "event path empty when absent" "" "$(event_worktree_path '{"foo":1}')"
+
 # Source-level guardrail: no script may create a worktree on the herdr side.
 # Scan only existing dirs (bin/ arrives in phase 1) and skip comment lines — the
 # rule is documented in comments that legitimately name the forbidden command.
