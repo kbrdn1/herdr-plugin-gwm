@@ -36,6 +36,18 @@ pr_number_from_url 'https://github.com/o/r/issues/42' >/dev/null; check "pr url 
 pr_number_from_url 'https://evil.com/o/r/pull/42'     >/dev/null; check "pr url rejects host"   "1" "$?"
 pr_number_from_url 'https://github.com/o/r/pull/42/files' >/dev/null; check "pr url rejects suffix" "1" "$?"
 
+# herdr_ws_id_for_path: maps a gwm path (trailing slash) to herdr's open ws id,
+# normalizing the trailing-slash mismatch (gwm ".../a/" vs herdr ".../a").
+wtlist='{"result":{"worktrees":[{"path":"/repo","open_workspace_id":"w1"},{"path":"/repo/wt/a","open_workspace_id":"w9"}]}}'
+check "ws id: gwm trailing slash maps to herdr id" "w9" \
+  "$(printf '%s' "$wtlist" | herdr_ws_id_for_path '/repo/wt/a/')"
+check "ws id: no path match is empty" "" \
+  "$(printf '%s' "$wtlist" | herdr_ws_id_for_path '/repo/wt/nope')"
+# present but not open (no open_workspace_id field) → empty, so we adopt instead
+wtlist2='{"result":{"worktrees":[{"path":"/repo/wt/b"}]}}'
+check "ws id: present but not open is empty" "" \
+  "$(printf '%s' "$wtlist2" | herdr_ws_id_for_path '/repo/wt/b')"
+
 # Source-level guardrail: no script may create a worktree on the herdr side.
 # Scan only existing dirs (bin/ arrives in phase 1) and skip comment lines — the
 # rule is documented in comments that legitimately name the forbidden command.
