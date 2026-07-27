@@ -1,7 +1,7 @@
 # herdr-plugin-gwm — gwm worktrees in herdr
 
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![herdr](https://img.shields.io/badge/herdr-%E2%89%A5%200.7.0-8A63D2)](https://herdr.dev)
+[![herdr](https://img.shields.io/badge/herdr-%E2%89%A5%200.7.4-8A63D2)](https://herdr.dev)
 [![gwm](https://img.shields.io/badge/gwm-1.0-orange)](https://github.com/kbrdn1/gwm-cli)
 [![shell](https://img.shields.io/badge/bash-glue--only-4EAA25?logo=gnubash&logoColor=white)](bin/)
 
@@ -28,7 +28,7 @@ A [herdr](https://herdr.dev) plugin that drives **[gwm](https://github.com/kbrdn
 
 There is no `[[build]]` step — it's plain bash, so `plugin link` and `plugin install` both wire it up with nothing to compile.
 
-**Requirements:** herdr ≥ 0.7.0 · `gwm` on `PATH` ([gwm-cli](https://github.com/kbrdn1/gwm-cli)) · `jq` · `fzf` · `bash` · macOS / Linux.
+**Requirements:** herdr ≥ 0.7.4 (popup panes) · `gwm` on `PATH` ([gwm-cli](https://github.com/kbrdn1/gwm-cli)) · `jq` · `fzf` · `bash` · macOS / Linux.
 
 ## the 30-second tour
 
@@ -65,6 +65,7 @@ description = "gwm: switch worktree"
 - **`worktree.created` event** — a worktree created on the herdr side (outside gwm) is enriched by `gwm bootstrap` (`.env` copy, hooks, preset). Adopts fire `worktree.opened`, not `.created`, so this never double-runs on the plugin's own work.
 - **Adopt-only guardrail** — every mutation goes through `gwm`; herdr is a reflection. A source-level test asserts no script ever emits `worktree create` or `worktree open --branch` (see [tests](#testing)).
 - **Root-workspace adoption** — adopts under the repo's *root* workspace, so invoking from inside a linked-worktree pane doesn't hit herdr's `linked_worktree_source` rejection.
+- **Popup pickers** — `gwm.switch` and `gwm.remove` open as a session-modal floating popup (herdr ≥ 0.7.4): the tiled layout doesn't move, Escape reaches fzf, and the popup closes when the script exits. The panes whose *output* is the point (`exec`, `clean`) or that run long git/network work (`create`, `review`) stay split — a modal that blocks the session for a 30s clone reads as frozen. `dashboard` stays zoomed. Sizing (`width`/`height`) is manifest-only, so the actions don't pass `--placement` (it would override the manifest and drop the size with it).
 - **Picker theming** — pickers inherit your `FZF_DEFAULT_OPTS` (colors, borders) by default, but neutralize file-browser-oriented bits (a `bat` preview, `ctrl-r` bound to `git ls-files`, `transform-header` on focus) that would garble non-file lines or rebind keys. Set `fzf_theme = "clean"` for a fully isolated picker.
 
 ## configuration
