@@ -44,7 +44,7 @@ divergent.
 
 Un plugin = un dossier avec `herdr-plugin.toml` + des commandes argv (n'importe
 quel langage). « The entire herdr CLI is the plugin API. » Pas de SDK. Le plugin
-rappelle herdr via `$HERDR_BIN_PATH`. herdr ≥ 0.7.0.
+rappelle herdr via `$HERDR_BIN_PATH`. herdr ≥ 0.7.4.
 
 ### 1.1 Sections du manifest `herdr-plugin.toml`
 
@@ -54,7 +54,7 @@ rappelle herdr via `$HERDR_BIN_PATH`. herdr ≥ 0.7.0.
 | `[[build]]` | commandes d'install (github seulement, pas `link`) | `command` (argv), `platforms` |
 | `[[actions]]` | entrées invocables | `id`, `title`, `contexts`, `command`, `platforms` |
 | `[[events]]` | hooks lifecycle | `on` (nom d'event), `command`, `platforms` |
-| `[[panes]]` | panneaux UI | `id`, `title`, `placement`, `command`, `platforms` |
+| `[[panes]]` | panneaux UI | `id`, `title`, `placement`, `width`/`height` (popup only), `command`, `platforms` |
 | `[[link_handlers]]` | interception d'URL cliquées | `id`, `title`, `pattern` (regex Rust), `action` |
 | `[[keys.command]]` | raccourcis (dans le config herdr, pas le manifest) | `key`, `type="plugin_action"`, `command="plugin.id.action"`, `description` |
 
@@ -73,8 +73,23 @@ ou globalement.
 
 ### 1.3 Placements de pane
 
-`overlay` (défaut, zoomé temporaire, restaure le focus en fermant), `split`,
-`tab`, `zoomed`. Un `plugin pane open --placement ...` peut override le manifest.
+`overlay` (défaut, zoomé temporaire, restaure le focus en fermant), `popup`,
+`split`, `tab`, `zoomed`. Un `plugin pane open --placement ...` peut override le
+manifest.
+
+`popup` (herdr ≥ 0.7.4) = terminal flottant **session-modal** : ne touche pas au
+layout tuilé, reçoit tout l'input (Escape inclus), se ferme quand la commande
+sort ou sur `popup.close`. Taille via `width`/`height` dans le manifest —
+cellules (entier) ou pourcentage (`"80%"`), clampé à un minimum ; omis = moitié
+d'écran. Ce n'est **pas** une pane herdr : pas de `HERDR_PANE_ID`, pas d'events
+de lifecycle, absent des APIs pane/layout/agent — la pane tuilée sous-jacente
+reste lisible via `HERDR_PLUGIN_CONTEXT_JSON`. Ouvrir un popup pendant Settings
+ou copy-mode renvoie `ui_busy`.
+
+⚠️ La CLI n'expose pas `--width`/`--height` : la taille ne vit que dans le
+manifest, et comme `--placement` override le manifest, une action qui passe
+`--placement` perd la taille avec. → déclarer le placement sur l'entrypoint,
+pas dans l'action.
 
 ### 1.4 Events éligibles pour `[[events]] on = "..."` (extraits du core)
 
@@ -195,7 +210,8 @@ read -r path branch < <(gwm path "$desc" --format=json | jq -r '"\(.path) \(.bra
   - `tab` → `herdr tab create --cwd` + `gwm` dans le shell : plus léger.
 
 ### Prérequis runtime
-herdr ≥ 0.7.0 · `gwm` sur PATH · `jq` · `fzf` · `bash` · plateformes macos/linux.
+herdr ≥ 0.7.4 (panes popup) · `gwm` sur PATH · `jq` · `fzf` · `bash` ·
+plateformes macos/linux.
 
 ---
 

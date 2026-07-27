@@ -1,7 +1,7 @@
 id = "gwm"
 name = "gwm worktrees"
 version = "0.2.0"
-min_herdr_version = "0.7.0"
+min_herdr_version = "0.7.4"
 description = "Drive gwm for git worktree management from herdr — create, switch, remove, review PRs, bootstrap, exec, clean. gwm stays the source of truth; herdr adopts."
 platforms = ["macos", "linux"]
 
@@ -10,6 +10,13 @@ platforms = ["macos", "linux"]
 # --cwd = the current repo (from the injected context JSON); without it the
 # scripts would run in the plugin dir, not the repo you're in.
 # NB: gwm is the source of truth — see PLAN.md §0. herdr only reflects.
+#
+# Placement lives in [[panes]], NOT here: `pane open --placement` OVERRIDES the
+# manifest, and the CLI has no --width/--height — so a popup's size can only be
+# declared on the entrypoint. Pass --placement from an action and you silently
+# lose both. Pick-and-go pickers are popups (0.7.4+); panes whose OUTPUT is the
+# point (exec, clean) or that run long git/network work (create, review) stay
+# split — a session-modal popup that blocks for a 30s clone reads as frozen.
 
 [[actions]]
 id = "create"
@@ -21,13 +28,13 @@ command = ["bash", "-c", "cwd=$(jq -r '.workspace_cwd // .focused_pane_cwd // em
 id = "switch"
 title = "gwm: switch worktree"
 contexts = ["workspace", "global"]
-command = ["bash", "-c", "cwd=$(jq -r '.workspace_cwd // .focused_pane_cwd // empty' <<<\"$HERDR_PLUGIN_CONTEXT_JSON\"); exec \"$HERDR_BIN_PATH\" plugin pane open --plugin \"$HERDR_PLUGIN_ID\" --entrypoint picker --placement split --direction down --cwd \"${cwd:-$PWD}\" --focus"]
+command = ["bash", "-c", "cwd=$(jq -r '.workspace_cwd // .focused_pane_cwd // empty' <<<\"$HERDR_PLUGIN_CONTEXT_JSON\"); exec \"$HERDR_BIN_PATH\" plugin pane open --plugin \"$HERDR_PLUGIN_ID\" --entrypoint picker --cwd \"${cwd:-$PWD}\" --focus"]
 
 [[actions]]
 id = "remove"
 title = "gwm: remove worktree"
 contexts = ["workspace"]
-command = ["bash", "-c", "cwd=$(jq -r '.workspace_cwd // .focused_pane_cwd // empty' <<<\"$HERDR_PLUGIN_CONTEXT_JSON\"); exec \"$HERDR_BIN_PATH\" plugin pane open --plugin \"$HERDR_PLUGIN_ID\" --entrypoint remover --placement split --direction down --cwd \"${cwd:-$PWD}\" --focus"]
+command = ["bash", "-c", "cwd=$(jq -r '.workspace_cwd // .focused_pane_cwd // empty' <<<\"$HERDR_PLUGIN_CONTEXT_JSON\"); exec \"$HERDR_BIN_PATH\" plugin pane open --plugin \"$HERDR_PLUGIN_ID\" --entrypoint remover --cwd \"${cwd:-$PWD}\" --focus"]
 
 # review: interactive (fzf over `gh pr list`) OR triggered by a clicked PR URL.
 # On a link click the context carries `clicked_url`; we forward it to the pane
@@ -69,13 +76,17 @@ command = ["bash", "-c", "exec bash \"$HERDR_PLUGIN_ROOT/bin/create.sh\""]
 [[panes]]
 id = "picker"
 title = "gwm — switch"
-placement = "split"
+placement = "popup"
+width = "70%"
+height = "60%"
 command = ["bash", "-c", "exec bash \"$HERDR_PLUGIN_ROOT/bin/switch.sh\""]
 
 [[panes]]
 id = "remover"
 title = "gwm — remove"
-placement = "split"
+placement = "popup"
+width = "70%"
+height = "60%"
 command = ["bash", "-c", "exec bash \"$HERDR_PLUGIN_ROOT/bin/remove.sh\""]
 
 [[panes]]
