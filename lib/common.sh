@@ -45,12 +45,16 @@ fzf_theme() {
 # transform-header/preview-label on focus, and ctrl-r → `git ls-files`. Our CLI
 # flags are applied last so they win over the inherited opts. `fzf_theme=clean`
 # drops the inherited opts entirely.
+# No --margin: switch/remove run in popup panes (herdr ≥ 0.7.4) that herdr
+# already frames, and a margin on top would crush the list. The pickers that
+# stay in a split (create/review/exec) go full-bleed instead — fine, and one
+# shared helper beats a per-caller margin flag.
 wt_fzf() {
   local opts=$FZF_DEFAULT_OPTS
   [[ $(fzf_theme) == clean ]] && opts=''
   FZF_DEFAULT_OPTS="$opts" fzf \
     --no-preview --bind 'focus:ignore' --bind 'ctrl-r:ignore' --header-label ' gwm ' \
-    --reverse --info=inline --border=rounded --margin=20%,30% "$@"
+    --reverse --info=inline --border=rounded "$@"
 }
 
 # Given a worktree path, print herdr's open_workspace_id for it (empty if not
