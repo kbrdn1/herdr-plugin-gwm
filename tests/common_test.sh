@@ -69,11 +69,33 @@ check "ws id: present but not open is empty" "" \
 
 # event_worktree_path: hooks get the full event envelope (EventEnvelope serialized
 # by herdr, shape taken from its 0.9.5 source); the path is .data.worktree.path.
-# The old top-level guesses (.worktree.path/.path/.cwd) never matched it.
-evt='{"event":"worktree.created","data":{"type":"worktree_created","workspace":{"workspace_id":"w3","label":"x"},"worktree":{"path":"/wt/a","branch":"feat/x","is_bare":false,"is_detached":false,"is_prunable":false,"is_linked_worktree":true,"open_workspace_id":"w3","label":"x"}}}'
+# The old top-level guesses (.worktree.path/.path/.cwd) never matched it, and
+# must not come back: a flat payload yields nothing.
+evt='{"event":"worktree_created","data":{"type":"worktree_created","workspace":{"workspace_id":"w3","label":"x"},"worktree":{"path":"/wt/a","branch":"feat/x","is_bare":false,"is_detached":false,"is_prunable":false,"is_linked_worktree":true,"open_workspace_id":"w3","label":"x"}}}'
 check "event path from .data.worktree.path" "/wt/a" "$(event_worktree_path "$evt")"
-check "event path empty when absent" "" "$(event_worktree_path '{"event":"worktree.created","data":{}}')"
+check "event path ignores the flat (non-herdr) shape" "" "$(event_worktree_path '{"worktree":{"path":"/wt/a"},"path":"/wt/b","cwd":"/wt/c"}')"
+check "event path empty when absent" "" "$(event_worktree_path '{"event":"worktree_created","data":{}}')"
 check "event path empty on empty payload" "" "$(event_worktree_path '')"
+
+# adopt_worktree: the argv it sends to a stub herdr. It resolves the repo's root
+# workspace from `worktree list` (no --json, output is always JSON), then adopts
+# with `worktree open --path` only; open_mode=tab opens a tab instead.
+hstub=$(mktemp -d); wtdir=$(mktemp -d)
+printf '%s\n' '#!/usr/bin/env bash' 'printf "%s\n" "$*" >>"$HSTUB_LOG"' \
+  '[[ "$1 $2" == "worktree list" ]] && printf %s "{\"result\":{\"source\":{\"source_workspace_id\":\"w1\"},\"worktrees\":[]}}"' \
+  'exit 0' >"$hstub/herdr"
+chmod +x "$hstub/herdr"
+(export HSTUB_LOG=$hstub/log HERDR_BIN_PATH=$hstub/herdr HERDR_PLUGIN_CONFIG_DIR=/nonexistent
+ adopt_worktree "$wtdir" feat/x)
+check "adopt: root ws from worktree list" "worktree list --cwd $PWD" "$(sed -n 1p "$hstub/log")"
+check "adopt: worktree open --path under root ws" \
+  "worktree open --workspace w1 --path $wtdir --label feat/x --focus" "$(sed -n 2p "$hstub/log")"
+: >"$hstub/log"; printf 'open_mode = "tab"\n' >"$hstub/config.toml"
+(export HSTUB_LOG=$hstub/log HERDR_BIN_PATH=$hstub/herdr HERDR_PLUGIN_CONFIG_DIR=$hstub HERDR_WORKSPACE_ID=w5
+ adopt_worktree "$wtdir" feat/x)
+check "adopt: open_mode=tab → tab create" \
+  "tab create --workspace w5 --cwd $wtdir --label feat/x --focus" "$(cat "$hstub/log")"
+rm -rf "$hstub" "$wtdir"
 
 # Source-level guardrail: no script may create a worktree on the herdr side.
 # Scan only existing dirs (bin/ arrives in phase 1) and skip comment lines — the
