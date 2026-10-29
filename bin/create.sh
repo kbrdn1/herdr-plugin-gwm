@@ -45,9 +45,10 @@ printf '\n→ gwm create %s\n\n' "${args[*]}"
 gwm create "${args[@]}" || die "gwm create failed (see above)"
 
 # Resolve the new worktree. Prefer an exact match on the linked issue (gwm derives
-# it from the branch) — immune to desc normalization; fall back to fuzzy path.
+# it from the branch) — immune to desc normalization; fall back to fuzzy path
+# when a desc was typed. Compared as numbers: gwm reads "007" as issue 7.
 row=$(gwm list --format=json 2>/dev/null \
-  | jq -c --arg i "$issue" 'map(select((.issue|tostring) == $i)) | last // empty')
+  | jq -c --arg i "$issue" 'map(select(.issue != null and .issue == ($i|tonumber))) | last // empty')
 if [[ -n $row ]]; then
   path=$(jq -r '.path' <<<"$row"); branch=$(jq -r '.branch' <<<"$row")
 elif [[ -n $desc ]]; then
