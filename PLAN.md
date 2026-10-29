@@ -293,7 +293,9 @@ macos/linux.
       annoncer ce que herdr fermera et les agents qui y tournent → **confirmation**
       (gwm ne demande pas) : `y` garde la branche, `D` la supprime aussi
       (`--delete-branch`, même non mergée ; gwm journalise sa pointe, `gwm undo`
-      la recrée) → `gwm remove` → `tab close` des autres tabs, puis `workspace
+      la recrée) → relire `pane list` (le chemin existe encore) : ne fermer que
+      l'intersection annoncé ∩ encore fermable → `gwm remove` → `tab close` des
+      autres tabs, puis `workspace
       close` ; ce qui porte le popup (tab ou workspace de l'appelant, lus dans le
       context JSON) est fermé en DERNIER, herdr tuant le popup avec lui.
 - [x] Keybinding d'exemple dans le README (`prefix+ctrl+shift+g` → `gwm.switch`).
