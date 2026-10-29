@@ -194,21 +194,26 @@ check "wt_row: in multi-repo mode a bare name is no key" "" "$(wt_row fix-57-rat
 check "wt_row: unknown key → nothing" "" "$(wt_row acme-api/nope <<<"$wsl")"
 check "ws_repos: every repo with a main checkout" "acme-api payments-svc" \
   "$(ws_repos <tests/fixtures/gwm-list-workspace.json | paste -sd' ' -)"
+check "ws_target_repos: only repos with a non-main worktree, once each" "acme-api" \
+  "$(ws_target_repos <tests/fixtures/gwm-list-workspace.json | paste -sd' ' -)"
 check "ws_repo_main: the repo's main checkout" "@ROOT@/payments-svc/" \
   "$(ws_repo_main payments-svc <tests/fixtures/gwm-list-workspace.json)"
 
-# remote_is_github_repo: local git config only.
+# origin_is_github_repo: local git config only.
 for url in https://github.com/Acme/Acme-API.git git@github.com:acme/acme-api ssh://git@github.com/acme/acme-api.git/; do
   git -C "$repo" remote remove origin 2>/dev/null; git -C "$repo" remote add origin "$url"
-  check "remote_is_github_repo: $url" "yes" "$(remote_is_github_repo "$repo" acme/acme-api && echo yes)"
+  check "origin_is_github_repo: $url" "yes" "$(origin_is_github_repo "$repo" acme/acme-api && echo yes)"
 done
-git -C "$repo" remote remove origin; git -C "$repo" remote add upstream https://github.com/acme/acme-api-v2.git
-git -C "$repo" remote add fork https://gitlab.com/acme/acme-api.git
-check "remote_is_github_repo: a longer name or another host is no match" "" \
-  "$(remote_is_github_repo "$repo" acme/acme-api && echo yes)"
-check "remote_is_github_repo: any remote counts (upstream of a fork)" "yes" \
-  "$(remote_is_github_repo "$repo" acme/acme-api-v2 && echo yes)"
-check "remote_is_github_repo: no remote at all → no" "" "$(remote_is_github_repo "$plain" acme/acme-api && echo yes)"
+git -C "$repo" remote set-url origin https://github.com/acme/acme-api-v2.git
+check "origin_is_github_repo: a longer name is no match" "" "$(origin_is_github_repo "$repo" acme/acme-api && echo yes)"
+git -C "$repo" remote set-url origin https://gitlab.com/acme/acme-api.git
+check "origin_is_github_repo: another host is no match" "" "$(origin_is_github_repo "$repo" acme/acme-api && echo yes)"
+# A fork clone: gwm review fetches from origin, so the upstream's PRs are no match.
+git -C "$repo" remote set-url origin git@github.com:me/acme-api.git
+git -C "$repo" remote add upstream https://github.com/acme/acme-api.git
+check "origin_is_github_repo: only origin counts (upstream of a fork is no match)" "" \
+  "$(origin_is_github_repo "$repo" acme/acme-api && echo yes)"
+check "origin_is_github_repo: no remote at all → no" "" "$(origin_is_github_repo "$plain" acme/acme-api && echo yes)"
 rm -rf "$repo" "$plain"
 
 check "pr_repo_from_url: owner/name of a PR URL" "acme/acme-api" "$(pr_repo_from_url https://github.com/acme/acme-api/pull/7)"

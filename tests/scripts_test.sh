@@ -488,14 +488,14 @@ check "workspace: … and gwm review too" "$(q gwm review 9)" "$(grep '^gwm revi
 run exec.sh $'git fetch\n' "$W"
 check "workspace: exec fans out with --workspace, no per-repo profile lookup" "$(lines \
   "$(q gwm list --workspace "$W" --format=json)" "$(q gwm exec --workspace "$W" -- bash -c 'git fetch')")" "$(calls)"
-check "workspace: … the prompt says how many repos" "of the 2 repo(s) under" "$(grep -o 'of the 2 repo(s) under' "$S/out")"
+check "workspace: … the prompt counts the repos it runs in (payments-svc has only main)" "of the 1 repo(s) under" "$(grep -o 'of the [0-9]* repo(s) under' "$S/out")"
 GWM_WS_EMPTY=1 run exec.sh $'git fetch\n' "$W"
 check "workspace: no repo below → exec refused, nothing runs" "$(q gwm list --workspace "$W" --format=json)" "$(calls)"
 
 run clean.sh "y" "$W"
 check "workspace: clean reports, then deletes, across the workspace" "$(lines \
   "$(q gwm list --workspace "$W" --format=json)" "$(q gwm clean --workspace "$W")" "$(q gwm clean --workspace "$W" --yes)")" "$(calls)"
-check "workspace: … the confirmation says how many repos" "in the 2 repo(s) under" "$(grep -o 'in the 2 repo(s) under' "$S/out")"
+check "workspace: … the confirmation counts the repos it deletes in" "in the 1 repo(s) under" "$(grep -o 'in the [0-9]* repo(s) under' "$S/out")"
 
 # --- worktree.created hook ---------------------------------------------------
 # herdr starts hooks in the plugin dir; gwm must run from the worktree itself.
