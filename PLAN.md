@@ -86,7 +86,10 @@ manifest.
 layout tuilé, reçoit tout l'input (Escape inclus), se ferme quand la commande
 sort ou sur `popup.close`. Taille via `width`/`height` dans le manifest —
 cellules (entier) ou pourcentage (`"80%"`), clampé à un minimum ; omis = moitié
-d'écran. Ce n'est **pas** une pane herdr : pas de `HERDR_PANE_ID`, pas d'events
+d'écran. Ce n'est **pas** une pane herdr : pas de `HERDR_PANE_ID` (ni
+`HERDR_WORKSPACE_ID` / `HERDR_TAB_ID` propres : lancé sans identité de pane, il
+n'hérite que de l'env du serveur, peut-être périmé) → workspace et tab de
+l'appelant à lire dans `HERDR_PLUGIN_CONTEXT_JSON` (`ctx_field`), pas d'events
 de lifecycle, absent des APIs pane/layout/agent — la pane tuilée sous-jacente
 reste lisible via `HERDR_PLUGIN_CONTEXT_JSON`. Ouvrir un popup pendant Settings
 ou copy-mode renvoie `ui_busy`.
@@ -274,7 +277,8 @@ macos/linux.
       `wt_fzf`, `herdr_ws_id_for_path`, `herdr_tabs_for_path`,
       `herdr_closable_tabs`, `ctx_field`, `event_worktree_path`,
       `pr_number_from_url`, et le **garde-fou** `adopt_worktree <path> <label>`
-      (seul chemin vers herdr : `worktree open --path` ou `tab create --cwd`).
+      (seul chemin qui OUVRE un worktree dans herdr : `worktree open --path` ou
+      `tab create --cwd` ; les autres appels ne font que focus/fermer un reflet).
 - [x] `bin/create.sh` : fzf sur `gwm types` (sans son pied `(source: …)`) +
       `(auto)` → issue → desc (vide = `gwm create --issue N --type T`, gwm ≥ 1.10 ;
       `(auto)` = `gwm create --issue N`, type depuis les labels, pas de desc ;
@@ -290,11 +294,14 @@ macos/linux.
       --dry-run` (motif ambigu = arrêt) → mapper AVANT la question l'`open_workspace_id`
       et les tabs fermables (`herdr_closable_tabs` : tous les panes dans le path,
       frontière `/`, workspace fermé exclu, jamais le dernier tab d'un workspace) →
-      annoncer ce que herdr fermera et les agents qui y tournent → **confirmation**
+      annoncer ce que herdr fermera, les agents qui y tournent, et en rouge un
+      worktree dirty (fichiers non commités perdus, `gwm undo` ne les rend pas)
+      → **confirmation**
       (gwm ne demande pas) : `y` garde la branche, `D` la supprime aussi
       (`--delete-branch`, même non mergée ; gwm journalise sa pointe, `gwm undo`
       la recrée) → relire `pane list` (le chemin existe encore) : ne fermer que
-      l'intersection annoncé ∩ encore fermable → `gwm remove` → `tab close` des
+      l'intersection annoncé ∩ encore fermable → `gwm remove` (un échec avec le
+      worktree déjà supprimé, hook post_remove, ferme quand même) → `tab close` des
       autres tabs, puis `workspace
       close` ; ce qui porte le popup (tab ou workspace de l'appelant, lus dans le
       context JSON) est fermé en DERNIER, herdr tuant le popup avec lui.
