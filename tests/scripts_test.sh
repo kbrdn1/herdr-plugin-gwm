@@ -71,6 +71,7 @@ cat >"$S/herdr-bin/herdr" <<'EOF'
 out=$(printf '%q ' herdr "$@"); printf '%s\n' "${out% }" >>"$STUB/log"
 [[ "$1 $2" == "worktree list" ]] && cat "$STUB/wt.json"
 [[ "$1 $2" == "pane list" ]] && cat "$STUB/panes.json"
+[[ "$*" == "${HERDR_FAIL:-}" ]] && exit 1   # HERDR_FAIL='<exact argv>' makes that call fail
 exit 0
 EOF
 cat >"$S/bin/herdr" <<'EOF'
@@ -96,7 +97,7 @@ chmod +x "$S"/bin/* "$S/herdr-bin/herdr"
 # must target w1.
 export STUB=$S PATH="$S/bin:$PATH" HERDR_PLUGIN_ROOT=$root HERDR_BIN_PATH=$S/herdr-bin/herdr \
   HERDR_PLUGIN_CONFIG_DIR=$S/config HERDR_WORKSPACE_ID=w7
-unset FZF_DEFAULT_OPTS GWM_REVIEW_URL HERDR_PLUGIN_EVENT_JSON GWM_FAIL
+unset FZF_DEFAULT_OPTS GWM_REVIEW_URL HERDR_PLUGIN_EVENT_JSON GWM_FAIL HERDR_FAIL HERDR_TAB_ID
 
 # run <script> <stdin> [cwd] — fresh logs, then $rc / $S/log / $S/cwd.log
 run() {
@@ -161,9 +162,11 @@ rm -f "$S/config/config.toml"
 
 # --- remove ------------------------------------------------------------------
 FZF_PICK=fix-57 run remove.sh "n"
-check "remove: N → only the dry-run preview, nothing removed or closed" "$(lines \
+check "remove: N → preview + read-only herdr lookups, nothing removed or closed" "$(lines \
   "$(q gwm list --format=json)" \
-  "$(q gwm remove fix-57-rate-limit-headers --dry-run)")" "$(calls)"
+  "$(q gwm remove fix-57-rate-limit-headers --dry-run)" \
+  "$(q herdr worktree list --cwd "$caller")" \
+  "$(q herdr pane list)")" "$(calls)"
 check "remove: the preview shows gwm's resolution before the question" \
   "branch: fix/#57-rate-limit-headers" "$(grep -o 'branch: fix/#57-rate-limit-headers' "$S/out")"
 
@@ -184,16 +187,32 @@ check "remove: y → map reflections first, gwm remove (branch kept), close them
   "$(q herdr worktree list --cwd "$caller")" \
   "$(q herdr pane list)" \
   "$(q gwm remove docs-71-openapi-examples)" \
+  "$(q herdr tab close w1:t3)" \
+  "$(q herdr workspace close w9)")" "$(calls)"
+check "remove: the question names what herdr will close" \
+  "herdr will close: workspace w9, tab(s) w1:t3" "$(grep -o 'herdr will close: .*' "$S/out")"
+check "remove: … and the agents that will be stopped" \
+  "agent(s) running there will be stopped: claude" "$(grep -o 'agent(s) running there will be stopped: [a-z, ]*' "$S/out")"
+
+# herdr kills this popup with the tab it was opened from: when that tab is one
+# of the reflections, it goes LAST, after the removed worktree's workspace.
+HERDR_WORKSPACE_ID=w1 HERDR_TAB_ID=w1:t3 FZF_PICK=docs-71 run remove.sh "y"
+check "remove: the caller's own tab is closed last" "$(lines \
   "$(q herdr workspace close w9)" \
-  "$(q herdr tab close w1:t3)")" "$(calls)"
+  "$(q herdr tab close w1:t3)")" "$(tail -n2 "$S/log")"
+
+HERDR_FAIL='tab close w1:t3' FZF_PICK=docs-71 run remove.sh "y"
+check "remove: a tab herdr refuses to close is reported, the workspace still closed" \
+  "1 reflection(s) herdr would not close" "$(grep -o '1 reflection(s) herdr would not close' "$S/out")"
+check "remove: … and the workspace close still ran" "$(q herdr workspace close w9)" "$(tail -n1 "$S/log")"
 
 FZF_PICK=docs-71 run remove.sh "D"
 check "remove: D → gwm remove --delete-branch" \
   "$(q gwm remove docs-71-openapi-examples --delete-branch)" "$(sed -n 5p "$S/log")"
+check "remove: the prompt says D deletes even unmerged work" "even unmerged" "$(grep -o 'even unmerged' "$S/out")"
 FZF_PICK=docs-71 run remove.sh "d"
-check "remove: lowercase d is not D → cancelled" "$(lines \
-  "$(q gwm list --format=json)" \
-  "$(q gwm remove docs-71-openapi-examples --dry-run)")" "$(calls)"
+check "remove: lowercase d is not D → cancelled, nothing removed or closed" "" \
+  "$(grep -E '^(gwm remove docs-71-openapi-examples$|herdr (tab|workspace) close)' "$S/log")"
 
 # --- create ------------------------------------------------------------------
 adopt57=$(q herdr worktree open --workspace w1 --path "$(wt fix-57-rate-limit-headers)" --label 'fix/#57-rate-limit-headers' --focus)
