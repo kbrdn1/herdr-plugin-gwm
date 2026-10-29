@@ -172,8 +172,8 @@ herdr plugin pane open --plugin ID --entrypoint ID [--placement split|zoomed --d
 ```
 
 Non utilisées (écartées) : `workspace create` (un workspace top-level non
-groupé, cf. README « plugin or gwm herdr? »), `pane run` / `pane list` /
-`pane close` (aucun nettoyage de panes à faire).
+groupé, cf. README « plugin or gwm herdr? »), `pane run` / `pane close` (on
+ferme des tabs entiers, jamais un pane isolé dans un tab mixte).
 
 ### 1.9 CLI de gestion du plugin (dev loop)
 
@@ -215,7 +215,9 @@ gwm list --format=json                    # docs/schema/worktree-list.schema.jso
                                           #   name, path, branch, issue, pr, is_main, status.{is_dirty,ahead,behind}
                                           #   + agents.top.{kind,freshness} (≥ 1.3, tier expérimental, optionnel)
 gwm review <PR#>                          # PR → worktree review/pr-<N>-<author>-<slug>, sans bootstrap par défaut
-gwm remove <PATTERN>...                   # ne demande PAS de confirmation (le plugin la fait), branche gardée
+gwm remove <PATTERN> --dry-run            # aperçu (nom, chemin, branche) ; motif ambigu = échec, rien touché
+gwm remove <PATTERN> [--delete-branch]    # ne demande PAS de confirmation (le plugin la fait) ; --delete-branch
+                                          #   supprime même non mergée, pointe journalisée → gwm undo
 gwm bootstrap [TARGET]                    # re-run bootstrap ; lit .gwm.toml depuis le repo du CWD
 gwm exec -- <cmd>                         # fan-out sur les worktrees NON-main (rollup ✓/✗)
 gwm clean [--yes]                         # rapport (puis suppression des dossiers git-ignorés), non-main
@@ -269,7 +271,7 @@ macos/linux.
       (contexts `["workspace","global"]`, `remove` en `["workspace"]`) + panes
       `creator` (split), `picker`/`remover` (popup 70 %×60 %).
 - [x] `lib/common.sh` : `herdr_bin`, `ctx_cwd`, `open_mode`, `fzf_theme`,
-      `wt_fzf`, `herdr_ws_id_for_path`, `event_worktree_path`,
+      `wt_fzf`, `herdr_ws_id_for_path`, `herdr_tabs_for_path`, `event_worktree_path`,
       `pr_number_from_url`, et le **garde-fou** `adopt_worktree <path> <label>`
       (seul chemin vers herdr : `worktree open --path` ou `tab create --cwd`).
 - [x] `bin/create.sh` : fzf sur `gwm types` (sans son pied `(source: …)`) +
@@ -333,7 +335,7 @@ herdr-plugin-gwm/
   tests/
     common_test.sh           # helpers purs + argv d'adopt_worktree contre un herdr stub
     scripts_test.sh          # bin/*.sh contre des stubs gwm/herdr/fzf/gh (argv exact)
-    fixtures/                # vraies sorties gwm 1.11 (chemins réécrits) ; worktree list herdr (schéma v0.9.5) et gh pr list construits
+    fixtures/                # vraies sorties gwm 1.11 (chemins réécrits) ; worktree list / pane list herdr (schéma v0.9.5) et gh pr list construits
   .github/workflows/ci.yml   # shellcheck + tests (PR, push dev/main)
   .shellcheckrc              # source-path=SCRIPTDIR : suit le source de lib/common.sh
   README.md  PLAN.md  LICENSE  .gitignore
@@ -363,8 +365,8 @@ ubuntu-latest) peut remonter ce qu'un 0.11 local ne voit plus (SC2119).
 `tests/scripts_test.sh` (CI aussi) lance chaque `bin/*.sh` avec des stubs
 `gwm` / `fzf` / `gh` en tête du `PATH` et un herdr joignable seulement via
 `$HERDR_BIN_PATH` (un `herdr` nu tombe sur un piège), nourris de fixtures tirées de
-vraies sorties gwm 1.11 (`tests/fixtures/`, chemins réécrits ; le `worktree list`
-herdr suit le schéma v0.9.5), et vérifie l'argv exact envoyé à gwm et à herdr,
+vraies sorties gwm 1.11 (`tests/fixtures/`, chemins réécrits ; `worktree list` et
+`pane list` herdr suivent le schéma v0.9.5), et vérifie l'argv exact envoyé à gwm et à herdr,
 plus les candidats reçus par les pickers switch et create.
 
 Ce que les stubs ne remplacent pas : le vrai gwm (contre `~/gwm-demo` en lecture
