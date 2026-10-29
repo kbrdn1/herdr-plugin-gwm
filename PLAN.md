@@ -338,8 +338,10 @@ macos/linux.
       ou `-- bash -c <cmd>` ; `--jobs N` optionnel ; échec en rouge) et `clean`
       (jeu par défaut ou nom de profil, rapport → confirmation → `--yes` avec le
       même jeu).
-- [x] support `--workspace` (multi-repo) : mode actif quand le dossier du workspace
-      n'est dans aucun work tree git. switch/remove listent avec `--workspace`
+- [x] support `--workspace` (multi-repo) : mode actif quand le cwd de l'action
+      (`workspace_cwd` de herdr = cwd courant du pane focus, le dossier du
+      workspace seulement en repli) n'est dans aucun work tree git ; exec demande
+      alors un y/N avant le fan-out. switch/remove listent avec `--workspace`
       (clés `repo/nom`) ; create/review/remove tournent depuis le checkout principal
       du repo choisi (plutôt que `--repo` : `gwm types` et `.gwm.toml` sont par repo,
       et gwm refuse `--workspace` sur remove/review) ; review sur lien cliqué = repo

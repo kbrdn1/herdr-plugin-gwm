@@ -78,12 +78,12 @@ description = "gwm: switch worktree"
 
 ## multi-repo mode
 
-Open a herdr workspace on a directory that is **not** a git repo itself but holds repos one level below it (e.g. `~/Projects`), and the actions drive all of them through gwm's `--workspace` mode. Nothing to configure: the mode is on whenever the workspace's directory sits outside any git work tree.
+Run an action from a directory that is **not** a git repo itself but holds repos one level below it (e.g. `~/Projects`), and it drives all of them through gwm's `--workspace` mode. Nothing to configure: the mode is on whenever that directory sits outside any git work tree. It is herdr's `workspace_cwd`, i.e. the **focused pane's current cwd** (the workspace's own directory only when the pane reports none), not the directory the workspace was opened on: a pane that `cd`'d out of its repo is enough to switch the mode.
 
 - **`gwm.switch` / `gwm.remove`** list every repo's worktrees (`gwm list --workspace`), keyed `repo/name` in the picker, so the same worktree name in two repos can't be confused. gwm has no `--workspace` for `remove`, so the preview and the removal run from the main checkout of the picked worktree's repo.
 - **`gwm.create`** asks for the repo first (no picker with a single repo), then runs the usual flow in its main checkout: the types and `.gwm.toml` are that repo's.
 - **`gwm.review`** runs in one repo too (gwm rejects `--workspace` there, and `gh pr list` reads the repo's remote): picked by hand for the `gh` picker; for a **clicked** PR URL, only the repos whose `origin` is that GitHub repo are candidates (https, ssh or scp form, read from git config, no network; `origin` because that's where `gwm review` fetches the PR, so a fork clone doesn't match its upstream's PRs), and none means a refusal, never PR #N of another repo.
-- **`gwm.exec` / `gwm.clean`** fan out over every repo (`gwm exec --workspace` / `gwm clean --workspace`); the prompt and the confirmation say how many repos they touch (those with a non-main worktree). Saved profiles are per repo and gwm can't list them outside one, so only the typed command and the default dir set are offered here.
+- **`gwm.exec` / `gwm.clean`** fan out over every repo (`gwm exec --workspace` / `gwm clean --workspace`); the prompt and the confirmation say how many repos they touch (those with a non-main worktree), and exec asks a `y/N` before running the typed command across them. Saved profiles are per repo and gwm can't list them outside one, so only the typed command and the default dir set are offered here.
 - **`gwm.dashboard`** runs bare `gwm`, which itself offers to open such a directory as a workspace (`[Y/n]`, yes by default).
 
 ## plugin or `gwm herdr`?
