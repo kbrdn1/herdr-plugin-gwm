@@ -45,7 +45,15 @@ case $1 in
     n=$2 name="review-pr-$2-alice-fix"; d=$STUB/root/worktrees/acme-api/$name; mkdir -p "$d"
     jq --arg d "$d" --arg nm "$name" --arg b "review/pr-$n-alice-fix" --argjson pr "$n" \
       '. + [.[1] | .name = $nm | .id = $nm | .path = $d | .branch = $b | .issue = null | .pr = $pr]' \
-      "$STUB/list.json" >"$STUB/list.tmp" && mv "$STUB/list.tmp" "$STUB/list.json" ;;
+      "$STUB/list.json" >"$STUB/list.tmp" && mv "$STUB/list.tmp" "$STUB/list.json"
+    # GWM_REVIEW_DECOY=<M>: a review/pr-<M> worktree listed AFTER the real one,
+    # so only an anchored, number-exact match picks the right PR.
+    if [[ -n ${GWM_REVIEW_DECOY:-} ]]; then
+      m=$GWM_REVIEW_DECOY; dd=$STUB/root/worktrees/acme-api/review-pr-$m-bob-decoy; mkdir -p "$dd"
+      jq --arg d "$dd" --arg b "review/pr-$m-bob-decoy" \
+        '. + [.[1] | .name = "decoy" | .id = "decoy" | .path = $d | .branch = $b | .issue = null]' \
+        "$STUB/list.json" >"$STUB/list.tmp" && mv "$STUB/list.tmp" "$STUB/list.json"
+    fi ;;
 esac
 [[ $1 == "${GWM_FAIL:-}" ]] && exit 1   # GWM_FAIL=<subcommand> makes that call fail
 exit 0
@@ -100,11 +108,12 @@ check "switch: not open → adopt under the root workspace" "$(lines \
   "$(q herdr worktree list --cwd "$caller")" \
   "$(q herdr worktree open --workspace w1 --path "$(wt fix-57-rate-limit-headers)" --label 'fix/#57-rate-limit-headers' --focus)")" "$(calls)"
 
-FZF_PICK=chore-63 run switch.sh ""
-check "switch: already open → workspace focus" "$(lines \
+# docs-71 is open in w9: neither the caller's workspace (w7) nor the root (w1).
+FZF_PICK=docs-71 run switch.sh ""
+check "switch: already open → focus ITS workspace" "$(lines \
   "$(q gwm list --format=json)" \
   "$(q herdr worktree list --cwd "$caller")" \
-  "$(q herdr workspace focus w7)")" "$(calls)"
+  "$(q herdr workspace focus w9)")" "$(calls)"
 
 printf 'open_mode = "tab"\n' >"$S/config/config.toml"
 FZF_PICK=fix-57 run switch.sh ""
@@ -117,12 +126,12 @@ rm -f "$S/config/config.toml"
 FZF_PICK=fix-57 run remove.sh "n"
 check "remove: N → nothing removed, nothing closed" "$(q gwm list --format=json)" "$(calls)"
 
-FZF_PICK=chore-63 run remove.sh "y"
-check "remove: y → map the workspace first, gwm remove, then workspace close" "$(lines \
+FZF_PICK=docs-71 run remove.sh "y"
+check "remove: y → map the workspace first, gwm remove, close ITS workspace" "$(lines \
   "$(q gwm list --format=json)" \
   "$(q herdr worktree list --cwd "$caller")" \
-  "$(q gwm remove chore-63-bump-axum)" \
-  "$(q herdr workspace close w7)")" "$(calls)"
+  "$(q gwm remove docs-71-openapi-examples)" \
+  "$(q herdr workspace close w9)")" "$(calls)"
 
 # --- create ------------------------------------------------------------------
 adopt57=$(q herdr worktree open --workspace w1 --path "$(wt fix-57-rate-limit-headers)" --label 'fix/#57-rate-limit-headers' --focus)
@@ -151,21 +160,26 @@ GWM_REVIEW_URL='https://evil.com/o/r/pull/7' run review.sh ""
 check "review: forged URL → nothing reaches gwm" "" "$(calls)"
 check "review: forged URL exits 1" "1" "$rc"
 
-GWM_REVIEW_URL='https://github.com/o/r/pull/7' run review.sh ""
-check "review: link click → gwm review <N>, adopt the review worktree" "$(lines \
+GWM_REVIEW_DECOY=71 GWM_REVIEW_URL='https://github.com/o/r/pull/7' run review.sh ""
+check "review: link click → gwm review <N>, adopt PR 7's worktree (not the pr-71 decoy)" "$(lines \
   "$(q gwm review 7)" \
   "$(q gwm list --format=json)" \
   "$(q herdr worktree list --cwd "$caller")" \
   "$(q herdr worktree open --workspace w1 --path "$(wt review-pr-7-alice-fix)" --label review/pr-7-alice-fix --focus)")" "$(calls)"
 
 FZF_PICK=idempotency run review.sh ""
-check "review: gh pr list picker → gwm review 9" \
-  "$(lines "$(q gh pr list --limit 50)" "$(q gwm review 9)")" "$(sed -n 1,2p "$S/log")"
+check "review: gh pr list picker → gwm review 9, adopt PR 9's worktree" "$(lines \
+  "$(q gh pr list --limit 50)" \
+  "$(q gwm review 9)" \
+  "$(q gwm list --format=json)" \
+  "$(q herdr worktree list --cwd "$caller")" \
+  "$(q herdr worktree open --workspace w1 --path "$(wt review-pr-9-alice-fix)" --label review/pr-9-alice-fix --focus)")" "$(calls)"
+check "review: picker path exits 0" "0" "$rc"
 
 # --- gwm failures stop the script before herdr is touched ---------------------
-GWM_FAIL=remove FZF_PICK=chore-63 run remove.sh "y"
+GWM_FAIL=remove FZF_PICK=docs-71 run remove.sh "y"
 check "remove: gwm remove fails → the workspace is NOT closed" \
-  "$(q gwm remove chore-63-bump-axum)" "$(tail -n1 "$S/log")"
+  "$(q gwm remove docs-71-openapi-examples)" "$(tail -n1 "$S/log")"
 GWM_FAIL=create FZF_PICK=fix run create.sh $'57\nrate-limit-headers'
 check "create: gwm create fails → nothing adopted" "$(q gwm create fix 57 rate-limit-headers)" "$(tail -n1 "$S/log")"
 GWM_FAIL=review GWM_REVIEW_URL='https://github.com/o/r/pull/7' run review.sh ""
