@@ -2,8 +2,9 @@
 # gwm: create a worktree, then adopt it into herdr. gwm is the source of truth
 # (see PLAN.md §0) — this script only ADOPTS what gwm produced.
 #
-# Flow: pick branch type (fzf over `gwm types`) → issue → desc → `gwm create`
-#       → resolve the new worktree → adopt via lib/common.sh::adopt_worktree.
+# Flow: pick branch type (fzf over `gwm types`) → issue → desc (empty = from the
+#       issue title) → `gwm create` → resolve the new worktree → adopt via
+#       lib/common.sh::adopt_worktree.
 # No `set -e`: fzf esc (130) and empty picks are normal exits handled by hand.
 set -uo pipefail
 
@@ -28,13 +29,20 @@ fi
 printf 'Issue number (digits): '; read -r issue
 [[ $issue =~ ^[0-9]+$ ]] || die "issue must be digits only: $issue"
 
-# 3. description — gwm normalizes it to kebab-case.
-printf 'Description (short): '; read -r desc
-[[ -z $desc ]] && exit 0
+# 3. description — gwm normalizes it to kebab-case. Empty = let gwm derive it
+#    from the issue's title (`gwm create --issue`, gwm ≥ 1.10): nothing to retype,
+#    and an issue that already has a worktree is just reported (exit 0), then
+#    adopted below. The picked type is passed as --type, so it always wins.
+printf 'Description (empty = from the issue title): '; read -r desc
+if [[ -n $desc ]]; then
+  args=("$type" "$issue" "$desc")
+else
+  args=(--issue "$issue" --type "$type")
+fi
 
 # Create via gwm. Interactive so any bootstrap / trust prompt shows in this pane.
-printf '\n→ gwm create %s %s %s\n\n' "$type" "$issue" "$desc"
-gwm create "$type" "$issue" "$desc" || die "gwm create failed (see above)"
+printf '\n→ gwm create %s\n\n' "${args[*]}"
+gwm create "${args[@]}" || die "gwm create failed (see above)"
 
 # Resolve the new worktree. Prefer an exact match on the linked issue (gwm derives
 # it from the branch) — immune to desc normalization; fall back to fuzzy path.
@@ -42,7 +50,7 @@ row=$(gwm list --format=json 2>/dev/null \
   | jq -c --arg i "$issue" 'map(select((.issue|tostring) == $i)) | last // empty')
 if [[ -n $row ]]; then
   path=$(jq -r '.path' <<<"$row"); branch=$(jq -r '.branch' <<<"$row")
-else
+elif [[ -n $desc ]]; then
   read -r path branch < <(gwm path "$desc" --format=json 2>/dev/null \
     | jq -r '"\(.path) \(.branch)"')
 fi
