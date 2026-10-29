@@ -51,6 +51,14 @@ fi
 printf 'Parallel jobs (empty = default): '; read -r jobs
 [[ -z $jobs || $jobs =~ ^[1-9][0-9]*$ ]] || die "jobs must be a positive number: $jobs"
 
+# 3. multi-repo mode: the mode follows the focused pane's cwd (a pane that cd'd
+#    out of its repo is enough), and the command then runs in several repos at
+#    once — ask before, once the scope is known.
+if [[ -n $ws ]]; then
+  printf 'Run it in %s? [y/N] ' "$where"; read -r ans
+  [[ $ans =~ ^[Yy]$ ]] || { printf 'cancelled\n'; exit 0; }
+fi
+
 printf '\n→ gwm exec %s%s%s\n\n' "${ws:+--workspace $(printf %q "$ws") }" "${jobs:+--jobs $jobs }" "$shown"
 if gwm exec ${ws:+--workspace "$ws"} ${jobs:+--jobs "$jobs"} "${run[@]}"; then
   printf '\n\033[32mdone\033[0m — press any key to close'
