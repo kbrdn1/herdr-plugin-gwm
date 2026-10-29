@@ -20,14 +20,14 @@ check() { # <desc> <expected> <actual>
 
 # --- sandbox: fixtures materialized under $S/root, stubs first on PATH --------
 S=$(mktemp -d); trap 'rm -rf "$S"' EXIT
-mkdir -p "$S/bin" "$S/config"
+mkdir -p "$S/bin" "$S/herdr-bin" "$S/config"
 sed "s|@ROOT@|$S/root|g" tests/fixtures/gwm-list.json >"$S/list.json"
 sed "s|@ROOT@|$S/root|g" tests/fixtures/herdr-worktree-list.json >"$S/wt.json"
 cp tests/fixtures/gwm-types.txt "$S/types.txt"
 cp tests/fixtures/gh-pr-list.txt "$S/gh.txt"
 jq -r '.[].path' "$S/list.json" | while read -r p; do mkdir -p "$p"; done
-repo=$S/root/acme-api
 wt() { printf '%s' "$S/root/worktrees/acme-api/$1"; }
+caller=$(wt chore-63-bump-axum)   # panes run with --cwd = the invoking workspace
 
 # argv logged with %q, one call per line; expectations are built the same way.
 q() { local out; out=$(printf '%q ' "$@"); printf '%s' "${out% }"; }
@@ -38,6 +38,7 @@ out=$(printf '%q ' gwm "$@"); printf '%s\n' "${out% }" >>"$STUB/log"
 printf '%s\n' "$PWD" >>"$STUB/cwd.log"
 case $1 in
   types) cat "$STUB/types.txt" ;;
+  bootstrap) cat >"$STUB/stdin.log" ;;   # what a trust prompt would read
   list)  cat "$STUB/list.json" ;;
   path)  jq -c --arg p "$2" '[.[] | select(.name | contains($p))][0] // empty | {name, path, branch}' "$STUB/list.json" ;;
   review) # gwm materializes review/pr-<N>-<author>-<slug>: mirror that in the list
@@ -49,11 +50,18 @@ esac
 [[ $1 == "${GWM_FAIL:-}" ]] && exit 1   # GWM_FAIL=<subcommand> makes that call fail
 exit 0
 EOF
-cat >"$S/bin/herdr" <<'EOF'
+# herdr is only reachable through $HERDR_BIN_PATH (what herdr injects; it does not
+# touch PATH). The stub lives off PATH; a bare `herdr` hits the trap instead.
+cat >"$S/herdr-bin/herdr" <<'EOF'
 #!/usr/bin/env bash
 out=$(printf '%q ' herdr "$@"); printf '%s\n' "${out% }" >>"$STUB/log"
 [[ "$1 $2" == "worktree list" ]] && cat "$STUB/wt.json"
 exit 0
+EOF
+cat >"$S/bin/herdr" <<'EOF'
+#!/usr/bin/env bash
+out=$(printf '%q ' BARE-herdr "$@"); printf '%s\n' "${out% }" >>"$STUB/log"
+exit 1
 EOF
 cat >"$S/bin/fzf" <<'EOF'
 #!/usr/bin/env bash
@@ -65,18 +73,19 @@ out=$(printf '%q ' gh "$@"); printf '%s\n' "${out% }" >>"$STUB/log"
 [[ "$1 $2" == "pr list" ]] && cat "$STUB/gh.txt"
 exit 0
 EOF
-chmod +x "$S"/bin/*
+chmod +x "$S"/bin/* "$S/herdr-bin/herdr"
 
-# The caller sits in a LINKED worktree workspace (w7), not the root (w1): herdr
-# rejects an open from there (linked_worktree_source), so adopts must target w1.
-export STUB=$S PATH="$S/bin:$PATH" HERDR_PLUGIN_ROOT=$root HERDR_BIN_PATH=$S/bin/herdr \
+# The caller sits in a LINKED worktree workspace (w7, cwd = its checkout), not the
+# root (w1): herdr rejects an open from there (linked_worktree_source), so adopts
+# must target w1.
+export STUB=$S PATH="$S/bin:$PATH" HERDR_PLUGIN_ROOT=$root HERDR_BIN_PATH=$S/herdr-bin/herdr \
   HERDR_PLUGIN_CONFIG_DIR=$S/config HERDR_WORKSPACE_ID=w7
 unset FZF_DEFAULT_OPTS GWM_REVIEW_URL HERDR_PLUGIN_EVENT_JSON GWM_FAIL
 
 # run <script> <stdin> [cwd] — fresh logs, then $rc / $S/log / $S/cwd.log
 run() {
   : >"$S/log"; : >"$S/cwd.log"
-  local cwd=${3:-$repo}
+  local cwd=${3:-$caller}
   (cd "$cwd" && HERDR_PLUGIN_CONTEXT_JSON="{\"workspace_cwd\":\"$cwd\"}" bash "$root/bin/$1" <<<"$2") >"$S/out" 2>&1
   rc=$?
 }
@@ -87,14 +96,14 @@ lines() { printf '%s\n' "$@"; }
 FZF_PICK=fix-57 run switch.sh ""
 check "switch: not open → adopt under the root workspace" "$(lines \
   "$(q gwm list --format=json)" \
-  "$(q herdr worktree list --cwd "$repo")" \
-  "$(q herdr worktree list --cwd "$repo")" \
+  "$(q herdr worktree list --cwd "$caller")" \
+  "$(q herdr worktree list --cwd "$caller")" \
   "$(q herdr worktree open --workspace w1 --path "$(wt fix-57-rate-limit-headers)" --label 'fix/#57-rate-limit-headers' --focus)")" "$(calls)"
 
 FZF_PICK=chore-63 run switch.sh ""
 check "switch: already open → workspace focus" "$(lines \
   "$(q gwm list --format=json)" \
-  "$(q herdr worktree list --cwd "$repo")" \
+  "$(q herdr worktree list --cwd "$caller")" \
   "$(q herdr workspace focus w7)")" "$(calls)"
 
 printf 'open_mode = "tab"\n' >"$S/config/config.toml"
@@ -111,7 +120,7 @@ check "remove: N → nothing removed, nothing closed" "$(q gwm list --format=jso
 FZF_PICK=chore-63 run remove.sh "y"
 check "remove: y → map the workspace first, gwm remove, then workspace close" "$(lines \
   "$(q gwm list --format=json)" \
-  "$(q herdr worktree list --cwd "$repo")" \
+  "$(q herdr worktree list --cwd "$caller")" \
   "$(q gwm remove chore-63-bump-axum)" \
   "$(q herdr workspace close w7)")" "$(calls)"
 
@@ -122,7 +131,7 @@ check "create: positional triple, resolved by issue, adopted" "$(lines \
   "$(q gwm types)" \
   "$(q gwm create fix 57 rate-limit-headers)" \
   "$(q gwm list --format=json)" \
-  "$(q herdr worktree list --cwd "$repo")" \
+  "$(q herdr worktree list --cwd "$caller")" \
   "$adopt57")" "$(calls)"
 
 FZF_PICK=fix run create.sh $'57\n'
@@ -146,7 +155,7 @@ GWM_REVIEW_URL='https://github.com/o/r/pull/7' run review.sh ""
 check "review: link click → gwm review <N>, adopt the review worktree" "$(lines \
   "$(q gwm review 7)" \
   "$(q gwm list --format=json)" \
-  "$(q herdr worktree list --cwd "$repo")" \
+  "$(q herdr worktree list --cwd "$caller")" \
   "$(q herdr worktree open --workspace w1 --path "$(wt review-pr-7-alice-fix)" --label review/pr-7-alice-fix --focus)")" "$(calls)"
 
 FZF_PICK=idempotency run review.sh ""
@@ -178,9 +187,10 @@ check "clean: y → report, then --yes" "$(lines "$(q gwm clean)" "$(q gwm clean
 # herdr starts hooks in the plugin dir; gwm must run from the worktree itself.
 evt=$(jq -cn --arg p "$(wt docs-71-openapi-examples)" \
   '{event: "worktree_created", data: {type: "worktree_created", workspace: {workspace_id: "w3"}, worktree: {path: $p, branch: "docs/#71-openapi-examples", is_linked_worktree: true}}}')
-HERDR_PLUGIN_EVENT_JSON=$evt run on_worktree_created.sh "" "$root"
+HERDR_PLUGIN_EVENT_JSON=$evt run on_worktree_created.sh "y" "$root"
 check "hook: gwm bootstrap on the event's worktree" "$(q gwm bootstrap "$(wt docs-71-openapi-examples)")" "$(calls)"
 check "hook: gwm runs from inside that worktree" "$(wt docs-71-openapi-examples)" "$(cat "$S/cwd.log")"
+check "hook: gwm gets no stdin (a trust prompt aborts, never reads a keystroke)" "" "$(cat "$S/stdin.log")"
 
 HERDR_PLUGIN_EVENT_JSON='{"worktree":{"path":"/tmp"}}' run on_worktree_created.sh "" "$root"
 check "hook: a payload without .data.worktree.path does nothing" "" "$(calls)"
