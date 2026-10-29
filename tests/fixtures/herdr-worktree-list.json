@@ -1,4 +1,5 @@
-{"id":"cli:worktree:list","result":{"type":"worktree_list","source":{"repo_key":"acme-api","repo_name":"acme-api","repo_root":"@ROOT@/acme-api","source_checkout_path":"@ROOT@/acme-api","source_workspace_id":"w1"},"worktrees":[
+{"id":"cli:worktree:list","result":{"type":"worktree_list","source":{"repo_key":"@ROOT@/acme-api/.git","repo_name":"acme-api","repo_root":"@ROOT@/acme-api","source_checkout_path":"@ROOT@/acme-api","source_workspace_id":"w1"},"worktrees":[
 {"path":"@ROOT@/acme-api","branch":"main","is_bare":false,"is_detached":false,"is_prunable":false,"is_linked_worktree":false,"open_workspace_id":"w1","label":"acme-api"},
-{"path":"@ROOT@/worktrees/acme-api/chore-63-bump-axum","branch":"chore/#63-bump-axum","is_bare":false,"is_detached":false,"is_prunable":false,"is_linked_worktree":true,"open_workspace_id":"w7","label":"chore/#63-bump-axum"},
-{"path":"@ROOT@/worktrees/acme-api/fix-57-rate-limit-headers","branch":"fix/#57-rate-limit-headers","is_bare":false,"is_detached":false,"is_prunable":false,"is_linked_worktree":true,"label":"fix/#57-rate-limit-headers"}]}}
+{"path":"@ROOT@/worktrees/acme-api/chore-63-bump-axum","branch":"chore/#63-bump-axum","is_bare":false,"is_detached":false,"is_prunable":false,"is_linked_worktree":true,"open_workspace_id":"w7","label":"acme-api"},
+{"path":"@ROOT@/worktrees/acme-api/fix-57-rate-limit-headers","branch":"fix/#57-rate-limit-headers","is_bare":false,"is_detached":false,"is_prunable":false,"is_linked_worktree":true,"label":"acme-api"}
+]}}

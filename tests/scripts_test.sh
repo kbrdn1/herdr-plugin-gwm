@@ -46,7 +46,8 @@ case $1 in
       '. + [.[1] | .name = $nm | .id = $nm | .path = $d | .branch = $b | .issue = null | .pr = $pr]' \
       "$STUB/list.json" >"$STUB/list.tmp" && mv "$STUB/list.tmp" "$STUB/list.json" ;;
 esac
-exit "${GWM_RC:-0}"
+[[ $1 == "${GWM_FAIL:-}" ]] && exit 1   # GWM_FAIL=<subcommand> makes that call fail
+exit 0
 EOF
 cat >"$S/bin/herdr" <<'EOF'
 #!/usr/bin/env bash
@@ -60,14 +61,17 @@ grep -m1 -F -- "${FZF_PICK:-}" || exit 1
 EOF
 cat >"$S/bin/gh" <<'EOF'
 #!/usr/bin/env bash
+out=$(printf '%q ' gh "$@"); printf '%s\n' "${out% }" >>"$STUB/log"
 [[ "$1 $2" == "pr list" ]] && cat "$STUB/gh.txt"
 exit 0
 EOF
 chmod +x "$S"/bin/*
 
+# The caller sits in a LINKED worktree workspace (w7), not the root (w1): herdr
+# rejects an open from there (linked_worktree_source), so adopts must target w1.
 export STUB=$S PATH="$S/bin:$PATH" HERDR_PLUGIN_ROOT=$root HERDR_BIN_PATH=$S/bin/herdr \
-  HERDR_PLUGIN_CONFIG_DIR=$S/config HERDR_WORKSPACE_ID=w1
-unset FZF_DEFAULT_OPTS GWM_REVIEW_URL HERDR_PLUGIN_EVENT_JSON
+  HERDR_PLUGIN_CONFIG_DIR=$S/config HERDR_WORKSPACE_ID=w7
+unset FZF_DEFAULT_OPTS GWM_REVIEW_URL HERDR_PLUGIN_EVENT_JSON GWM_FAIL
 
 # run <script> <stdin> [cwd] — fresh logs, then $rc / $S/log / $S/cwd.log
 run() {
@@ -96,7 +100,7 @@ check "switch: already open → workspace focus" "$(lines \
 printf 'open_mode = "tab"\n' >"$S/config/config.toml"
 FZF_PICK=fix-57 run switch.sh ""
 check "switch: open_mode=tab → tab create" \
-  "$(q herdr tab create --workspace w1 --cwd "$(wt fix-57-rate-limit-headers)" --label 'fix/#57-rate-limit-headers' --focus)" \
+  "$(q herdr tab create --workspace w7 --cwd "$(wt fix-57-rate-limit-headers)" --label 'fix/#57-rate-limit-headers' --focus)" \
   "$(tail -n1 "$S/log")"
 rm -f "$S/config/config.toml"
 
@@ -146,7 +150,19 @@ check "review: link click → gwm review <N>, adopt the review worktree" "$(line
   "$(q herdr worktree open --workspace w1 --path "$(wt review-pr-7-alice-fix)" --label review/pr-7-alice-fix --focus)")" "$(calls)"
 
 FZF_PICK=idempotency run review.sh ""
-check "review: gh pr list picker → gwm review 9" "$(q gwm review 9)" "$(sed -n 1p "$S/log")"
+check "review: gh pr list picker → gwm review 9" \
+  "$(lines "$(q gh pr list --limit 50)" "$(q gwm review 9)")" "$(sed -n 1,2p "$S/log")"
+
+# --- gwm failures stop the script before herdr is touched ---------------------
+GWM_FAIL=remove FZF_PICK=chore-63 run remove.sh "y"
+check "remove: gwm remove fails → the workspace is NOT closed" \
+  "$(q gwm remove chore-63-bump-axum)" "$(tail -n1 "$S/log")"
+GWM_FAIL=create FZF_PICK=fix run create.sh $'57\nrate-limit-headers'
+check "create: gwm create fails → nothing adopted" "$(q gwm create fix 57 rate-limit-headers)" "$(tail -n1 "$S/log")"
+GWM_FAIL=review GWM_REVIEW_URL='https://github.com/o/r/pull/7' run review.sh ""
+check "review: gwm review fails → nothing adopted" "$(q gwm review 7)" "$(calls)"
+GWM_FAIL=clean run clean.sh "y"
+check "clean: report fails → no --yes" "$(q gwm clean)" "$(calls)"
 
 # --- exec / clean ------------------------------------------------------------
 run exec.sh "git fetch --prune"
