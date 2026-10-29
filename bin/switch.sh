@@ -18,7 +18,7 @@ wtjson=$(gwm list --format=json 2>/dev/null)
 # name is the first field (kebab, no spaces) so we recover it by cutting field 1.
 # Badges: issue / PR / dirty / ahead / behind, then the most recent agent session
 # (`@claude`, `*` = active in the last 5 min; gwm ≥ 1.3, experimental and
-# optional, so a missing `agents` field just shows no badge). CI status is
+# optional: a missing or reshaped `agents` field just shows no badge). CI status is
 # skipped — it'd need a per-worktree `gwm status` network call.
 sel=$(printf '%s\n' "$wtjson" | jq -r '
   .[] | select(.branch != null) |
@@ -28,7 +28,7 @@ sel=$(printf '%s\n' "$wtjson" | jq -r '
     (if .status.is_dirty then "±" else "" end),
     (if (.status.ahead // 0) > 0 then "↑\(.status.ahead)" else "" end),
     (if (.status.behind // 0) > 0 then "↓\(.status.behind)" else "" end),
-    (.agents.top // empty | "@\(.kind)" + (if .freshness == "active" then "*" else "" end))
+    (try (.agents.top // empty | "@\(.kind)" + (if .freshness == "active" then "*" else "" end)) catch empty)
   ] | map(select(. != "")) | join("  ")' \
   | wt_fzf --prompt='switch to ❯ ' --header='↵ to switch · esc to cancel')
 [[ -z $sel ]] && exit 0
