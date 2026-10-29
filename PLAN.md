@@ -35,7 +35,8 @@ clean, badges PR/CI, workspace multi-repo, daemon).
 
 > Le plugin n'appelle **JAMAIS** `herdr worktree create` ni `herdr worktree open --branch`.
 > Toute création / suppression / mutation passe par `gwm`.
-> herdr ne fait que **refléter** : `worktree open --path` (adopter) et `workspace close` (fermer).
+> herdr ne fait que **refléter** : `worktree open --path` (adopter), `workspace focus|close`,
+> `tab create|focus|close` (mode tab, et tabs laissés sur un worktree supprimé).
 
 Tant que cette ligne tient, il n'y a qu'une source de vérité (gwm). Si on la
 casse, herdr crée des git worktrees hors du contrôle de gwm → deux sources qui
@@ -164,6 +165,9 @@ herdr worktree list --cwd PATH                                    # root ws + ma
 herdr workspace focus <workspace_id>                              # switch : déjà reflété → focus
 herdr workspace close <workspace_id>                              # fermer le reflet après gwm remove (worktree lié : pas de --group, réservé au primaire depuis 0.9.0)
 herdr tab create [--workspace ID] --cwd PATH --label TEXT --focus # mode léger (open_mode=tab)
+herdr pane list                                                   # cwd de chaque pane → tabs qui ne reflètent qu'un worktree
+herdr tab focus <tab_id>                                          # switch, open_mode=tab : tab déjà ouvert → focus
+herdr tab close <tab_id>                                          # remove : tabs dont tous les panes étaient dans le worktree
 herdr plugin pane open --plugin ID --entrypoint ID [--placement split|zoomed --direction down] --cwd PATH [--env K=V] --focus
 ```
 
@@ -277,10 +281,15 @@ macos/linux.
 - [x] `bin/switch.sh` : `gwm list --format=json` → fzf (badges issue/PR/±/↑/↓
       + `@<agent>` / `@<agent>*` depuis le champ optionnel `agents`, gwm ≥ 1.3 ;
       pas de CI : il faudrait un appel réseau par worktree) → `workspace focus`
-      si déjà ouvert, sinon `adopt_worktree`.
-- [x] `bin/remove.sh` : fzf sur les worktrees non-main → **confirmation** (gwm
-      ne demande pas) → mapper le path vers `open_workspace_id` AVANT → `gwm
-      remove` (branche gardée) → `herdr workspace close`.
+      si déjà ouvert (en `open_mode=tab` : `tab focus` d'un tab déjà uniquement
+      sur ce worktree), sinon `adopt_worktree`.
+- [x] `bin/remove.sh` : fzf sur les worktrees non-main → aperçu `gwm remove
+      --dry-run` (motif ambigu = arrêt) → **confirmation** (gwm ne demande pas) :
+      `y` garde la branche, `D` la supprime aussi (`--delete-branch`, même non
+      mergée ; gwm journalise sa pointe, `gwm undo` la recrée) → mapper AVANT
+      l'`open_workspace_id` et les tabs dont tous les panes sont dans le path
+      (`herdr pane list`, frontière `/`, workspace fermé exclu) → `gwm remove`
+      → `workspace close` + `tab close`.
 - [x] Keybinding d'exemple dans le README (`prefix+ctrl+shift+g` → `gwm.switch`).
 - [x] Tests bash des helpers (cf. §6).
 
@@ -342,6 +351,7 @@ Pas de `[[build]]` (bash, rien à compiler) → `plugin link` marche direct, et
 - `wt_fzf` contre un `fzf` stub (héritage des opts, mode clean, survie à `set -u`),
 - `pr_number_from_url` (+ rejet d'URL forgée),
 - `herdr_ws_id_for_path` (slash final gwm vs herdr),
+- `herdr_tabs_for_path` (tous les panes dedans, frontière `/`, pane sans cwd = dehors),
 - `event_worktree_path` sur une enveloppe herdr complète (forme plate rejetée),
 - `adopt_worktree` contre un `HERDR_BIN_PATH` stub qui journalise son argv,
 - le garde-fou : aucun chemin de code n'émet `worktree create` / `--branch`.
