@@ -28,7 +28,7 @@ A [herdr](https://herdr.dev) plugin that drives **[gwm](https://github.com/kbrdn
 
 There is no `[[build]]` step — it's plain bash, so `plugin link` and `plugin install` both wire it up with nothing to compile.
 
-**Requirements:** herdr ≥ 0.7.4 (popup panes) · `gwm` on `PATH` ([gwm-cli](https://github.com/kbrdn1/gwm-cli)) · `jq` · `fzf` · `bash` · macOS / Linux.
+**Requirements:** herdr ≥ 0.7.4 (popup panes) · `gwm` on `PATH` ([gwm-cli](https://github.com/kbrdn1/gwm-cli); ≥ 1.10 to derive a worktree from an existing issue) · `jq` · `fzf` · `bash` · macOS / Linux.
 
 ## the 30-second tour
 
@@ -36,10 +36,10 @@ From any pane inside a herdr workspace that sits in a gwm-managed repo:
 
 ```bash
 herdr plugin action invoke gwm.switch      # fzf over gwm worktrees → focus if open, else adopt
-herdr plugin action invoke gwm.create      # branch type → issue → desc → gwm create → adopt
+herdr plugin action invoke gwm.create      # branch type → issue → desc (empty = issue title) → gwm create → adopt
 herdr plugin action invoke gwm.remove      # fzf → confirm → gwm remove → close the reflection
 herdr plugin action invoke gwm.review      # fzf over `gh pr list` → gwm review → adopt
-herdr plugin action invoke gwm.exec        # run a command across every worktree
+herdr plugin action invoke gwm.exec        # run a command across every non-main worktree
 herdr plugin action invoke gwm.clean       # report reclaimable artifacts → confirm → delete
 herdr plugin action invoke gwm.dashboard   # gwm's live TUI in a pane
 ```
@@ -56,17 +56,33 @@ description = "gwm: switch worktree"
 
 ## what it does
 
-- **`gwm.create`** — fzf over `gwm types` (branch type) → issue number → description → runs `gwm create`, then resolves the new worktree by its **linked issue** (immune to description normalization; falls back to a fuzzy path lookup) and adopts it into herdr.
+- **`gwm.create`** — fzf over `gwm types` (branch type) → issue number → description → runs `gwm create`. Leave the description **empty** and gwm derives it from the issue's title instead (`gwm create --issue <N> --type <type>`, gwm ≥ 1.10, needs the repo's forge reachable): nothing to retype, and an issue that already has a worktree is just adopted again. Cancel with Esc in the type picker. The plugin then resolves the new worktree by its **linked issue** (immune to description normalization) and adopts it into herdr. A typed description adds a fuzzy path lookup as fallback; an issue-derived one has none, so it needs a `branch_pattern` that carries `{issue}` (gwm's default does).
 - **`gwm.switch`** — fzf over `gwm list --format=json` with live **badges** (issue `#N`, `PR#N`, dirty `±`, ahead `↑`, behind `↓`). If herdr already reflects the pick it just **focuses** the workspace; otherwise it **adopts** it — no duplicate workspaces.
 - **`gwm.remove`** — fzf over removable worktrees (never the main checkout) → an explicit **confirm gate** (gwm's `remove` doesn't prompt) → `gwm remove` (branch kept, so the work stays recoverable) → `workspace close` to keep the sidebar in sync.
 - **`gwm.review`** — fzf over `gh pr list` (or a plain PR-number prompt) → `gwm review <N>` materializes the PR as an isolated worktree → adopt. Also wired to a **link handler**: Ctrl-clicking a GitHub PR URL (`…/pull/N`) triggers it, passing the strictly-extracted PR *number* to gwm — never a raw or forged URL. herdr routes link clicks to plugins only while `ui.mouse_capture` is on (Ctrl on every platform, macOS included); with capture off, your terminal's own link shortcut opens the browser instead.
-- **`gwm.exec` / `gwm.clean`** — `gwm exec -- <cmd>` fans a command across every worktree with a `✓/✗` rollup; `gwm clean` reports reclaimable build artifacts (`target/`, `node_modules/`, …) and deletes only git-ignored ones after a confirm.
+- **`gwm.exec` / `gwm.clean`** — `gwm exec -- <cmd>` fans a command across every non-main worktree with a `✓/✗` rollup; `gwm clean` reports, across the same non-main worktrees, reclaimable build artifacts (`target/`, `node_modules/`, …) and deletes only git-ignored ones after a confirm.
 - **`gwm.dashboard`** — surfaces gwm's own TUI in a zoomed pane: the live worktree table with PR/CI/dirty/ahead-behind badges, no reimplementation.
 - **`worktree.created` event** — a worktree created on the herdr side (outside gwm) is enriched by `gwm bootstrap` (`.env` copy, hooks, preset), run from inside that worktree so gwm uses its repo's `.gwm.toml` (herdr starts hooks in the plugin dir). The path comes from the event envelope (`.data.worktree.path`). Adopts fire `worktree.opened`, not `.created`, so this never double-runs on the plugin's own work.
 - **Adopt-only guardrail** — every mutation goes through `gwm`; herdr is a reflection. A source-level test asserts no script ever emits `worktree create` or `worktree open --branch` (see [tests](#testing)).
 - **Root-workspace adoption** — adopts under the repo's *root* workspace, so invoking from inside a linked-worktree pane doesn't hit herdr's `linked_worktree_source` rejection.
 - **Popup pickers** — `gwm.switch` and `gwm.remove` open as a session-modal floating popup (herdr ≥ 0.7.4): the tiled layout doesn't move, Escape reaches fzf, and the popup closes when the script exits. The panes whose *output* is the point (`exec`, `clean`) or that run long git/network work (`create`, `review`) stay split — a modal that blocks the session for a 30s clone reads as frozen. `dashboard` stays zoomed. Placement and size (`width`/`height`) are declared once, on the `[[panes]]` entrypoint; the popup actions pass no `--placement`, which would override it.
 - **Picker theming** — pickers inherit your `FZF_DEFAULT_OPTS` (colors, borders) by default, but neutralize file-browser-oriented bits (a `bat` preview, `ctrl-r` bound to `git ls-files`, `transform-header` on focus) that would garble non-file lines or rebind keys. Set `fzf_theme = "clean"` for a fully isolated picker.
+
+## plugin or `gwm herdr`?
+
+gwm ≥ 1.10 ships its own [`gwm herdr <pattern>`](https://github.com/kbrdn1/gwm-cli). Both open a gwm worktree inside herdr and neither creates anything on the herdr side; they differ in what herdr ends up holding, so keep both.
+
+| | plugin, `open_mode = "workspace"` (default) | plugin, `open_mode = "tab"` | `gwm herdr <pattern>` |
+|:--|:--|:--|:--|
+| herdr call | `worktree open --path` under the repo's root workspace | `tab create --workspace <current> --cwd` | `tab create --workspace <current> --cwd`, or `pane split --current` with `-p` / `--direction` |
+| you get | a **workspace** of its own, grouped under the repo in the sidebar, with git checkout provenance | a tab in the current workspace | a tab, or a split pane, in the current workspace |
+| picking | fzf with badges; focuses it if already open | fzf with badges; a new tab each time | a fuzzy name you type, or the `t` key in gwm's TUI |
+| after `gwm.remove` | its workspace is closed | the tab stays open | the tab / pane stays open |
+| needs | the plugin | the plugin | only gwm, run from a herdr pane (`$HERDR_ENV`) |
+
+Use the **plugin** when the worktree is a unit of work you switch to and back from (an agent per worktree, its own tabs and panes): it lands in the repo's worktree group, `gwm.switch` never opens a duplicate, and `gwm.remove` takes the reflection down with it. Use **`gwm herdr`** to look at a worktree next to what you're doing, from a shell, a script or gwm's TUI: no plugin, no picker, nothing left in the sidebar.
+
+One trap: gwm's TUI setting `[tui] mux_open_in = "workspace"` runs `herdr workspace create`, a plain top-level workspace that herdr does **not** group as a worktree of the repo. The grouped workspace is the plugin's default.
 
 ## configuration
 
@@ -98,6 +114,7 @@ Glue-only bash. Each script is `gwm <cmd> --format=json` → transform with `jq`
 
 ```
 gwm create <type> <issue> <desc>          # gwm owns creation
+gwm create --issue <N> --type <type>      #   …or derives the slug from the issue title
 gwm list / path --format=json | jq        # read the source of truth
 $HERDR_BIN_PATH worktree open --path …     # herdr adopts (never creates)
 ```
