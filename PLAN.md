@@ -271,7 +271,8 @@ macos/linux.
       (contexts `["workspace","global"]`, `remove` en `["workspace"]`) + panes
       `creator` (split), `picker`/`remover` (popup 70 %×60 %).
 - [x] `lib/common.sh` : `herdr_bin`, `ctx_cwd`, `open_mode`, `fzf_theme`,
-      `wt_fzf`, `herdr_ws_id_for_path`, `herdr_tabs_for_path`, `event_worktree_path`,
+      `wt_fzf`, `herdr_ws_id_for_path`, `herdr_tabs_for_path`,
+      `herdr_closable_tabs`, `ctx_field`, `event_worktree_path`,
       `pr_number_from_url`, et le **garde-fou** `adopt_worktree <path> <label>`
       (seul chemin vers herdr : `worktree open --path` ou `tab create --cwd`).
 - [x] `bin/create.sh` : fzf sur `gwm types` (sans son pied `(source: …)`) +
@@ -286,12 +287,15 @@ macos/linux.
       si déjà ouvert (en `open_mode=tab` : `tab focus` d'un tab déjà uniquement
       sur ce worktree), sinon `adopt_worktree`.
 - [x] `bin/remove.sh` : fzf sur les worktrees non-main → aperçu `gwm remove
-      --dry-run` (motif ambigu = arrêt) → **confirmation** (gwm ne demande pas) :
-      `y` garde la branche, `D` la supprime aussi (`--delete-branch`, même non
-      mergée ; gwm journalise sa pointe, `gwm undo` la recrée) → mapper AVANT
-      l'`open_workspace_id` et les tabs dont tous les panes sont dans le path
-      (`herdr pane list`, frontière `/`, workspace fermé exclu) → `gwm remove`
-      → `workspace close` + `tab close`.
+      --dry-run` (motif ambigu = arrêt) → mapper AVANT la question l'`open_workspace_id`
+      et les tabs fermables (`herdr_closable_tabs` : tous les panes dans le path,
+      frontière `/`, workspace fermé exclu, jamais le dernier tab d'un workspace) →
+      annoncer ce que herdr fermera et les agents qui y tournent → **confirmation**
+      (gwm ne demande pas) : `y` garde la branche, `D` la supprime aussi
+      (`--delete-branch`, même non mergée ; gwm journalise sa pointe, `gwm undo`
+      la recrée) → `gwm remove` → `tab close` des autres tabs, puis `workspace
+      close` ; ce qui porte le popup (tab ou workspace de l'appelant, lus dans le
+      context JSON) est fermé en DERNIER, herdr tuant le popup avec lui.
 - [x] Keybinding d'exemple dans le README (`prefix+ctrl+shift+g` → `gwm.switch`).
 - [x] Tests bash des helpers (cf. §6).
 
@@ -353,7 +357,10 @@ Pas de `[[build]]` (bash, rien à compiler) → `plugin link` marche direct, et
 - `wt_fzf` contre un `fzf` stub (héritage des opts, mode clean, survie à `set -u`),
 - `pr_number_from_url` (+ rejet d'URL forgée),
 - `herdr_ws_id_for_path` (slash final gwm vs herdr),
-- `herdr_tabs_for_path` (tous les panes dedans, frontière `/`, pane sans cwd = dehors),
+- `herdr_tabs_for_path` / `herdr_closable_tabs` (tous les panes dedans, frontière `/`,
+  pane sans cwd = dehors ; la version fermable ne vide jamais un workspace),
+- `ctx_field` (workspace / tab de l'appelant : un popup ne reçoit ni
+  `HERDR_WORKSPACE_ID` ni `HERDR_TAB_ID`),
 - `event_worktree_path` sur une enveloppe herdr complète (forme plate rejetée),
 - `adopt_worktree` contre un `HERDR_BIN_PATH` stub qui journalise son argv,
 - le garde-fou : aucun chemin de code n'émet `worktree create` / `--branch`.
