@@ -125,6 +125,10 @@ check "switch: an active session is starred (@claude*)" \
 jq '(.[] | select(.name == "fix-57-rate-limit-headers") | .agents) = "reshaped"' "$S/list.idle" >"$S/list.json"
 FZF_PICK=feat-42 run switch.sh ""
 check "switch: a reshaped agents field keeps every worktree listed" "5" "$(grep -c . "$S/fzf.in")"
+jq '(.[] | select(.name == "fix-57-rate-limit-headers") | .agents.top) = {"agent": "claude"}' "$S/list.idle" >"$S/list.json"
+FZF_PICK=feat-42 run switch.sh ""
+check "switch: a top session without a string kind shows no badge (no @null)" \
+  'fix-57-rate-limit-headers  #57' "$(grep '^fix-57' "$S/fzf.in")"
 cp "$S/list.idle" "$S/list.json"
 
 FZF_PICK=docs-71 run switch.sh ""

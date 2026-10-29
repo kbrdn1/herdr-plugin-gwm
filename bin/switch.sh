@@ -28,7 +28,7 @@ sel=$(printf '%s\n' "$wtjson" | jq -r '
     (if .status.is_dirty then "±" else "" end),
     (if (.status.ahead // 0) > 0 then "↑\(.status.ahead)" else "" end),
     (if (.status.behind // 0) > 0 then "↓\(.status.behind)" else "" end),
-    (try (.agents.top // empty | "@\(.kind)" + (if .freshness == "active" then "*" else "" end)) catch empty)
+    (try (.agents.top // empty | select((.kind | type) == "string") | "@\(.kind)" + (if .freshness == "active" then "*" else "" end)) catch empty)
   ] | map(select(. != "")) | join("  ")' \
   | wt_fzf --prompt='switch to ❯ ' --header='↵ to switch · esc to cancel')
 [[ -z $sel ]] && exit 0
