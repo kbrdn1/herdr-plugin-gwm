@@ -56,6 +56,11 @@ case $1 in
         "$STUB/list.json" >"$STUB/list.tmp" && mv "$STUB/list.tmp" "$STUB/list.json"
     fi ;;
   remove) # --dry-run prints gwm's own resolution, in its real format
+    # GWM_REMOVE_GONE=1: the real removal deletes the directory (then GWM_FAIL
+    # can model a post_remove hook failing after the fact).
+    if [[ ${GWM_REMOVE_GONE:-} == 1 && " $* " != *" --dry-run "* ]]; then
+      rm -rf -- "$(jq -r --arg n "$2" '.[] | select(.name == $n) | .path' "$STUB/list.json")"
+    fi
     if [[ " $* " == *" --dry-run "* ]]; then
       jq -r --arg n "$2" \
         '.[] | select(.name == $n) | "would remove:\n  name:   \(.name)\n  path:   \(.path)\n  branch: \(.branch)"' "$STUB/list.json"
@@ -331,6 +336,25 @@ check "review: gh pr list picker → gwm review 9, adopt PR 9's worktree" "$(lin
   "$(q herdr worktree list --cwd "$caller")" \
   "$(q herdr worktree open --workspace w1 --path "$(wt review-pr-9-alice-fix)" --label review/pr-9-alice-fix --focus)")" "$(calls)"
 check "review: picker path exits 0" "0" "$rc"
+
+FZF_PICK=feat-42 run remove.sh "n"
+check "remove: a dirty worktree is flagged before the question" "uncommitted changes" "$(grep -o 'uncommitted changes' "$S/out")"
+FZF_PICK=docs-71 run remove.sh "n"
+check "remove: a clean one is not" "" "$(grep -o 'uncommitted changes' "$S/out")"
+
+# A stale HERDR_TAB_ID leaked from the server env must not win over the context.
+HERDR_TAB_ID=w9:t1 CTX_WS=w1 CTX_TAB=w1:t3 FZF_PICK=docs-71 run remove.sh "y"
+check "remove: the caller's tab comes from the context, not a stale env" "$(q herdr tab close w1:t3)" "$(tail -n1 "$S/log")"
+
+# gwm exits non-zero AFTER deleting the worktree (failing post_remove hook):
+# the reflections now point at nothing and are closed anyway.
+GWM_REMOVE_GONE=1 GWM_FAIL='remove docs-71-openapi-examples' FZF_PICK=docs-71 run remove.sh "y"
+check "remove: post_remove failure with the worktree gone → reflections still closed" "$(lines \
+  "$(q herdr tab close w1:t3)" \
+  "$(q herdr workspace close w9)")" "$(tail -n2 "$S/log")"
+check "remove: … and the error is reported" "gwm reported an error after removing it" \
+  "$(grep -o 'gwm reported an error after removing it' "$S/out")"
+mkdir -p "$(wt docs-71-openapi-examples)"
 
 # --- gwm failures stop the script before herdr is touched ---------------------
 GWM_FAIL='remove docs-71-openapi-examples' FZF_PICK=docs-71 run remove.sh "y"
