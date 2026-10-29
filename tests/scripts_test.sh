@@ -23,6 +23,7 @@ S=$(mktemp -d); trap 'rm -rf "$S"' EXIT
 mkdir -p "$S/bin" "$S/herdr-bin" "$S/config"
 sed "s|@ROOT@|$S/root|g" tests/fixtures/gwm-list.json >"$S/list.json"
 sed "s|@ROOT@|$S/root|g" tests/fixtures/herdr-worktree-list.json >"$S/wt.json"
+sed "s|@ROOT@|$S/root|g" tests/fixtures/herdr-pane-list.json >"$S/panes.json"
 cp tests/fixtures/gwm-types.txt "$S/types.txt"
 cp tests/fixtures/gh-pr-list.txt "$S/gh.txt"
 jq -r '.[].path' "$S/list.json" | while read -r p; do mkdir -p "$p"; done
@@ -54,8 +55,13 @@ case $1 in
         '. + [.[1] | .name = "decoy" | .id = "decoy" | .path = $d | .branch = $b | .issue = null]' \
         "$STUB/list.json" >"$STUB/list.tmp" && mv "$STUB/list.tmp" "$STUB/list.json"
     fi ;;
+  remove) # --dry-run prints gwm's own resolution, in its real format
+    if [[ " $* " == *" --dry-run "* ]]; then
+      jq -r --arg n "$2" --arg del "$([[ " $* " == *" --delete-branch "* ]] && printf ' (would be deleted)')" \
+        '.[] | select(.name == $n) | "would remove:\n  name:   \(.name)\n  path:   \(.path)\n  branch: \(.branch)\($del)"' "$STUB/list.json"
+    fi ;;
 esac
-[[ $1 == "${GWM_FAIL:-}" ]] && exit 1   # GWM_FAIL=<subcommand> makes that call fail
+[[ "$*" == "${GWM_FAIL:-}" ]] && exit 1   # GWM_FAIL='<exact argv>' makes that one call fail
 exit 0
 EOF
 # herdr is only reachable through $HERDR_BIN_PATH (what herdr injects; it does not
@@ -64,6 +70,7 @@ cat >"$S/herdr-bin/herdr" <<'EOF'
 #!/usr/bin/env bash
 out=$(printf '%q ' herdr "$@"); printf '%s\n' "${out% }" >>"$STUB/log"
 [[ "$1 $2" == "worktree list" ]] && cat "$STUB/wt.json"
+[[ "$1 $2" == "pane list" ]] && cat "$STUB/panes.json"
 exit 0
 EOF
 cat >"$S/bin/herdr" <<'EOF'
@@ -138,26 +145,55 @@ check "switch: already open → focus ITS workspace" "$(lines \
   "$(q herdr workspace focus w9)")" "$(calls)"
 
 printf 'open_mode = "tab"\n' >"$S/config/config.toml"
-FZF_PICK=fix-57 run switch.sh ""
-check "switch: open_mode=tab → tab create in the caller's workspace" "$(lines \
+FZF_PICK=feat-42 run switch.sh ""
+check "switch: open_mode=tab, no tab on it yet → tab create in the caller's workspace" "$(lines \
   "$(q gwm list --format=json)" \
   "$(q herdr worktree list --cwd "$caller")" \
-  "$(q herdr tab create --workspace w7 --cwd "$(wt fix-57-rate-limit-headers)" --label 'fix/#57-rate-limit-headers' --focus)")" "$(calls)"
+  "$(q herdr pane list)" \
+  "$(q herdr tab create --workspace w7 --cwd "$(wt feat-42-payment-webhooks)" --label 'feat/#42-payment-webhooks' --focus)")" "$(calls)"
+FZF_PICK=fix-57 run switch.sh ""
+check "switch: open_mode=tab, a tab already only on it (w7:t2) → tab focus, no duplicate" "$(lines \
+  "$(q gwm list --format=json)" \
+  "$(q herdr worktree list --cwd "$caller")" \
+  "$(q herdr pane list)" \
+  "$(q herdr tab focus w7:t2)")" "$(calls)"
 rm -f "$S/config/config.toml"
 
 # --- remove ------------------------------------------------------------------
 FZF_PICK=fix-57 run remove.sh "n"
-check "remove: N → nothing removed, nothing closed" "$(q gwm list --format=json)" "$(calls)"
+check "remove: N → only the dry-run preview, nothing removed or closed" "$(lines \
+  "$(q gwm list --format=json)" \
+  "$(q gwm remove fix-57-rate-limit-headers --dry-run)")" "$(calls)"
+check "remove: the preview shows gwm's resolution before the question" \
+  "branch: fix/#57-rate-limit-headers" "$(grep -o 'branch: fix/#57-rate-limit-headers' "$S/out")"
+
+GWM_FAIL='remove fix-57-rate-limit-headers --dry-run' FZF_PICK=fix-57 run remove.sh "y"
+check "remove: a refused dry-run stops before the question" \
+  "$(q gwm remove fix-57-rate-limit-headers --dry-run)" "$(tail -n1 "$S/log")"
+check "remove: a refused dry-run asks nothing" "" "$(grep -o 'keep the branch' "$S/out")"
 
 FZF_PICK=acme-api run remove.sh "y"
 check "remove: the main checkout is never offered" "$(q gwm list --format=json)" "$(calls)"
 
+# docs-71: its own workspace (w9) + one tab elsewhere only on it (w1:t3). Kept:
+# a mixed tab (w1:t4), a docs-71-…-old prefix decoy (w1:t5), a no-cwd pane (w1:t6).
 FZF_PICK=docs-71 run remove.sh "y"
-check "remove: y → map the workspace first, gwm remove, close ITS workspace" "$(lines \
+check "remove: y → map reflections first, gwm remove (branch kept), close them" "$(lines \
   "$(q gwm list --format=json)" \
+  "$(q gwm remove docs-71-openapi-examples --dry-run)" \
   "$(q herdr worktree list --cwd "$caller")" \
+  "$(q herdr pane list)" \
   "$(q gwm remove docs-71-openapi-examples)" \
-  "$(q herdr workspace close w9)")" "$(calls)"
+  "$(q herdr workspace close w9)" \
+  "$(q herdr tab close w1:t3)")" "$(calls)"
+
+FZF_PICK=docs-71 run remove.sh "D"
+check "remove: D → gwm remove --delete-branch" \
+  "$(q gwm remove docs-71-openapi-examples --delete-branch)" "$(sed -n 5p "$S/log")"
+FZF_PICK=docs-71 run remove.sh "d"
+check "remove: lowercase d is not D → cancelled" "$(lines \
+  "$(q gwm list --format=json)" \
+  "$(q gwm remove docs-71-openapi-examples --dry-run)")" "$(calls)"
 
 # --- create ------------------------------------------------------------------
 adopt57=$(q herdr worktree open --workspace w1 --path "$(wt fix-57-rate-limit-headers)" --label 'fix/#57-rate-limit-headers' --focus)
@@ -238,12 +274,12 @@ check "review: gh pr list picker → gwm review 9, adopt PR 9's worktree" "$(lin
 check "review: picker path exits 0" "0" "$rc"
 
 # --- gwm failures stop the script before herdr is touched ---------------------
-GWM_FAIL=remove FZF_PICK=docs-71 run remove.sh "y"
-check "remove: gwm remove fails → the workspace is NOT closed" \
+GWM_FAIL='remove docs-71-openapi-examples' FZF_PICK=docs-71 run remove.sh "y"
+check "remove: gwm remove fails → no workspace or tab closed" \
   "$(q gwm remove docs-71-openapi-examples)" "$(tail -n1 "$S/log")"
-GWM_FAIL=create FZF_PICK=fix run create.sh $'57\nrate-limit-headers'
+GWM_FAIL='create fix 57 rate-limit-headers' FZF_PICK=fix run create.sh $'57\nrate-limit-headers'
 check "create: gwm create fails → nothing adopted" "$(q gwm create fix 57 rate-limit-headers)" "$(tail -n1 "$S/log")"
-GWM_FAIL=review GWM_REVIEW_URL='https://github.com/o/r/pull/7' run review.sh ""
+GWM_FAIL='review 7' GWM_REVIEW_URL='https://github.com/o/r/pull/7' run review.sh ""
 check "review: gwm review fails → nothing adopted" "$(q gwm review 7)" "$(calls)"
 GWM_FAIL=clean run clean.sh "y"
 check "clean: report fails → no --yes" "$(q gwm clean)" "$(calls)"
