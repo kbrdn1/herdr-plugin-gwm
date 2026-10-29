@@ -73,7 +73,8 @@ exit 1
 EOF
 cat >"$S/bin/fzf" <<'EOF'
 #!/usr/bin/env bash
-grep -m1 -F -- "${FZF_PICK:-}" || exit 1
+in=$(cat); printf '%s\n' "$in" >"$STUB/fzf.in"   # the candidates the picker got
+grep -m1 -F -- "${FZF_PICK:-}" <<<"$in" || exit 1
 EOF
 cat >"$S/bin/gh" <<'EOF'
 #!/usr/bin/env bash
@@ -92,7 +93,7 @@ unset FZF_DEFAULT_OPTS GWM_REVIEW_URL HERDR_PLUGIN_EVENT_JSON GWM_FAIL
 
 # run <script> <stdin> [cwd] — fresh logs, then $rc / $S/log / $S/cwd.log
 run() {
-  : >"$S/log"; : >"$S/cwd.log"
+  : >"$S/log"; : >"$S/cwd.log"; : >"$S/fzf.in"
   local cwd=${3:-$caller}
   (cd "$cwd" && HERDR_PLUGIN_CONTEXT_JSON="{\"workspace_cwd\":\"$cwd\"}" bash "$root/bin/$1" <<<"$2") >"$S/out" 2>&1
   rc=$?
@@ -109,6 +110,27 @@ check "switch: not open → adopt under the root workspace" "$(lines \
   "$(q herdr worktree open --workspace w1 --path "$(wt fix-57-rate-limit-headers)" --label 'fix/#57-rate-limit-headers' --focus)")" "$(calls)"
 
 # docs-71 is open in w9: neither the caller's workspace (w7) nor the root (w1).
+check "switch: picker badges (issue, ±, @agent from gwm list's agents field)" "$(lines \
+  'fix-57-rate-limit-headers  #57  @codex' \
+  'docs-71-openapi-examples  #71  @claude' \
+  'chore-63-bump-axum  #63  ±' \
+  'feat-42-payment-webhooks  #42  ±  @claude')" "$(grep -v '^acme-api' "$S/fzf.in")"
+
+jq '(.[] | select(.name == "feat-42-payment-webhooks") | .agents.top.freshness) = "active"' "$S/list.json" >"$S/list.active"
+cp "$S/list.json" "$S/list.idle"; cp "$S/list.active" "$S/list.json"
+FZF_PICK=feat-42 run switch.sh ""
+check "switch: an active session is starred (@claude*)" \
+  'feat-42-payment-webhooks  #42  ±  @claude*' "$(grep '^feat-42' "$S/fzf.in")"
+# `agents` is gwm's experimental tier: a reshaped field drops the badge, never rows.
+jq '(.[] | select(.name == "fix-57-rate-limit-headers") | .agents) = "reshaped"' "$S/list.idle" >"$S/list.json"
+FZF_PICK=feat-42 run switch.sh ""
+check "switch: a reshaped agents field keeps every worktree listed" "5" "$(grep -c . "$S/fzf.in")"
+jq '(.[] | select(.name == "fix-57-rate-limit-headers") | .agents.top) = {"agent": "claude"}' "$S/list.idle" >"$S/list.json"
+FZF_PICK=feat-42 run switch.sh ""
+check "switch: a top session without a string kind shows no badge (no @null)" \
+  'fix-57-rate-limit-headers  #57' "$(grep '^fix-57' "$S/fzf.in")"
+cp "$S/list.idle" "$S/list.json"
+
 FZF_PICK=docs-71 run switch.sh ""
 check "switch: already open → focus ITS workspace" "$(lines \
   "$(q gwm list --format=json)" \
@@ -169,6 +191,26 @@ check "create: no issue match → gwm path fallback on the typed desc" "$(lines 
   "$(q gwm path payment-webhooks --format=json)" \
   "$(q herdr worktree list --cwd "$caller")" \
   "$(q herdr worktree open --workspace w1 --path "$(wt feat-42-payment-webhooks)" --label 'feat/#42-payment-webhooks' --focus)")" "$(calls)"
+
+check "create: type picker = gwm types (no \"(source:\" footer), then the (auto) entry" \
+  "feat fix hotfix docs test refactor chore perf ci build (auto) type from the issue labels" "$(paste -sd' ' "$S/fzf.in")"
+
+FZF_PICK=auto run create.sh $'57'
+check "create: auto → gwm create --issue N, type left to the issue's labels" "$(lines \
+  "$(q gwm types)" \
+  "$(q gwm create --issue 57)" \
+  "$(q gwm list --format=json)" \
+  "$(q herdr worktree list --cwd "$caller")" \
+  "$adopt57")" "$(calls)"
+check "create: auto asks no description" "" "$(grep -o 'Description' "$S/out")"
+
+# A repo may legally declare a branch type named `auto` (gwm: ^[a-z]+$): picking
+# it must create an `auto` branch, not trigger the label-derived path.
+cp "$S/types.txt" "$S/types.orig"; printf '  auto      A configured type\n' >>"$S/types.txt"
+FZF_PICK=auto run create.sh $'57\nmy-desc'
+check "create: a configured type named auto is a normal type" \
+  "$(q gwm create auto 57 my-desc)" "$(sed -n 2p "$S/log")"
+cp "$S/types.orig" "$S/types.txt"
 
 FZF_PICK=fix run create.sh $'abc\nx'
 check "create: non-digit issue → refused before gwm create" "$(q gwm types)" "$(calls)"

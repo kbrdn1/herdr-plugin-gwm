@@ -2,9 +2,9 @@
 # gwm: create a worktree, then adopt it into herdr. gwm is the source of truth
 # (see PLAN.md §0) — this script only ADOPTS what gwm produced.
 #
-# Flow: pick branch type (fzf over `gwm types`) → issue → desc (empty = from the
-#       issue title) → `gwm create` → resolve the new worktree → adopt via
-#       lib/common.sh::adopt_worktree.
+# Flow: pick branch type (fzf over `gwm types`, or `(auto)`) → issue → desc (empty
+#       = from the issue title; not asked with `(auto)`) → `gwm create` → resolve
+#       the new worktree → adopt via lib/common.sh::adopt_worktree.
 # No `set -e`: fzf esc (130) and empty picks are normal exits handled by hand.
 set -uo pipefail
 
@@ -16,12 +16,16 @@ die() { printf '\n\033[31m%s\033[0m press any key to close' "$1"; read -rn1; exi
 
 command -v gwm >/dev/null || die "gwm not found on PATH"
 
-# 1. branch type — fzf over `gwm types` first column, plain read as fallback.
+# 1. branch type — fzf over `gwm types` first column (its "(source: …)" footer is
+#    not a type), then the `(auto)` entry: no type at all, gwm reads it off the
+#    issue's labels. gwm type names are ^[a-z]+$, so a parenthesised sentinel can
+#    never shadow a configured type. Plain read as fallback.
+auto='(auto) type from the issue labels'
 if command -v fzf >/dev/null; then
-  type=$(gwm types 2>/dev/null | awk 'NF{print $1}' \
+  type=$({ gwm types 2>/dev/null | awk 'NF && $1 !~ /^\(/ {print $1}'; printf '%s\n' "$auto"; } \
     | wt_fzf --prompt='branch type ❯ ' --header='↵ to pick · esc to cancel')
 else
-  printf 'Branch type (feat/fix/…): '; read -r type
+  printf 'Branch type (feat/fix/…, or (auto)): '; read -r type
 fi
 [[ -z ${type:-} ]] && exit 0
 
@@ -33,8 +37,15 @@ printf 'Issue number (digits): '; read -r issue
 #    from the issue's title (`gwm create --issue`, gwm ≥ 1.10): nothing to retype,
 #    and an issue that already has a worktree is just reported (exit 0), then
 #    adopted below. The picked type is passed as --type, so it always wins.
-printf 'Description (empty = from the issue title): '; read -r desc
-if [[ -n $desc ]]; then
+#    `(auto)` asks nothing more: the whole triple comes from the issue (labels →
+#    type, title → desc), and gwm refuses, naming --type, unless the labels pick
+#    exactly one type.
+desc='' from_labels=0
+[[ $type == '(auto)'* ]] && from_labels=1
+((from_labels)) || { printf 'Description (empty = from the issue title): '; read -r desc; }
+if ((from_labels)); then
+  args=(--issue "$issue")
+elif [[ -n $desc ]]; then
   args=("$type" "$issue" "$desc")
 else
   args=(--issue "$issue" --type "$type")
