@@ -112,14 +112,16 @@ WT_KEY_JQ='def key: if .repo then "\(.repo)/\(.name)" else .name end;'
 wt_row() { jq -c --arg k "$1" "$WT_KEY_JQ"' [.[] | select(key == $k)][0] // empty' 2>/dev/null; }
 
 # Multi-repo mode, stdin = `gwm list --workspace` JSON: every repo below the
-# root (one with a main checkout), and the main checkout of repo $1.
+# root (one with a main checkout), the ones gwm exec / clean act on (at least
+# one non-main worktree), and the main checkout of repo $1.
 ws_repos() { jq -r '.[] | select(.repo != null and .is_main == true) | .repo' 2>/dev/null; }
+ws_target_repos() { jq -r '[.[] | select(.repo != null and .is_main != true) | .repo] | unique[]' 2>/dev/null; }
 ws_repo_main() { jq -r --arg r "$1" '[.[] | select(.repo == $r and .is_main == true)][0].path // empty' 2>/dev/null; }
 
 # Multi-repo mode, for the actions that work on ONE repo (create: gwm types and
 # .gwm.toml are per-repo; review: gwm rejects --workspace there): cd into the
 # main checkout of a repo below $1 — the only one, or the one picked. $2, if
-# set (owner/name), keeps only the repos with a remote on that GitHub repo: a
+# set (owner/name), keeps only the repos whose origin is that GitHub repo: a
 # clicked PR URL must land in its own repo, never on PR #N of another one.
 # Returns 1 when cancelled, 2 on error (said on stderr).
 ws_enter_repo() {
@@ -129,10 +131,10 @@ ws_enter_repo() {
   [[ -n $repos ]] || { printf 'no git repository one level below %s\n' "$1" >&2; return 2; }
   if [[ -n ${2:-} ]]; then
     while read -r r; do
-      remote_is_github_repo "$(ws_repo_main "$r" <<<"$json")" "$2" && hits+=$r$'\n'
+      origin_is_github_repo "$(ws_repo_main "$r" <<<"$json")" "$2" && hits+=$r$'\n'
     done <<<"$repos"
     repos=${hits%$'\n'}
-    [[ -n $repos ]] || { printf 'no repository below %s has %s as a remote\n' "$1" "$2" >&2; return 2; }
+    [[ -n $repos ]] || { printf 'no repository below %s has %s as its origin\n' "$1" "$2" >&2; return 2; }
   fi
   r=$repos
   if [[ $repos == *$'\n'* ]]; then
@@ -147,18 +149,19 @@ ws_enter_repo() {
   fi
 }
 
-# Does any remote of the checkout at $1 point at the GitHub repo $2 (owner/name)?
+# Is the origin of the checkout at $1 the GitHub repo $2 (owner/name)? origin
+# only: `gwm review` resolves and fetches the PR there and nowhere else, so on a
+# fork clone (origin = fork, upstream = canonical) an upstream PR is no match.
 # https, ssh:// and scp forms, with or without .git, case-insensitive (GitHub
 # names are). Local only: reads git config, no network.
-remote_is_github_repo() {
+origin_is_github_repo() {
   local want url
   want=$(tr '[:upper:]' '[:lower:]' <<<"$2")
-  while read -r url; do
-    url=$(tr '[:upper:]' '[:lower:]' <<<"$url"); url=${url%/}; url=${url%.git}
-    case $url in
-      "https://github.com/$want" | "ssh://git@github.com/$want" | "git@github.com:$want") return 0 ;;
-    esac
-  done < <(git -C "$1" config --get-regexp '^remote\..*\.url$' 2>/dev/null | awk '{print $2}')
+  url=$(git -C "$1" config --get remote.origin.url 2>/dev/null) || return 1
+  url=$(tr '[:upper:]' '[:lower:]' <<<"$url"); url=${url%/}; url=${url%.git}
+  case $url in
+    "https://github.com/$want" | "ssh://git@github.com/$want" | "git@github.com:$want") return 0 ;;
+  esac
   return 1
 }
 
