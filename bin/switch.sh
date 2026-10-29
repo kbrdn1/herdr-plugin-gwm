@@ -36,7 +36,7 @@ branch=$(printf '%s\n' "$wtjson" | jq -r --arg n "$name" '.[] | select(.name == 
 [[ -z $path || $path == null ]] && die "couldn't resolve path for: $name"
 
 # Already reflected in herdr? → focus that workspace. Else adopt it.
-wsid=$("$herdr" worktree list --cwd "$PWD" --json 2>/dev/null | herdr_ws_id_for_path "$path")
+wsid=$("$herdr" worktree list --cwd "$PWD" 2>/dev/null | herdr_ws_id_for_path "$path")
 if [[ -n $wsid ]]; then
   exec "$herdr" workspace focus "$wsid"
 fi

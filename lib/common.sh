@@ -60,7 +60,7 @@ wt_fzf() {
 }
 
 # Given a worktree path, print herdr's open_workspace_id for it (empty if not
-# open). Reads `herdr worktree list ... --json` on stdin. Pure/testable.
+# open). Reads `herdr worktree list` output (always JSON) on stdin. Pure/testable.
 # Normalizes the trailing slash: gwm paths carry one (".../foo/"), herdr's don't.
 herdr_ws_id_for_path() {
   local path=${1%/}
@@ -70,13 +70,15 @@ herdr_ws_id_for_path() {
 }
 
 # Extract the worktree path from a herdr event payload (HERDR_PLUGIN_EVENT_JSON).
-# The exact field varies by herdr version, so try the likely ones. Pure/testable.
-#   $1 = event json (defaults to $HERDR_PLUGIN_EVENT_JSON)
+# herdr passes the serialized event envelope, same shape from 0.7.4 to 0.9.5:
+#   {"event":"worktree_created","data":{"type":"worktree_created",
+#    "workspace":{…},"worktree":{"path":…,"branch":…}}}
+# (`event` is snake_case here; the dotted name is in $HERDR_PLUGIN_EVENT.)
+# Pure/testable.   $1 = event json
 event_worktree_path() {
-  local json=${1:-${HERDR_PLUGIN_EVENT_JSON:-}}
+  local json=${1:-}
   [[ -n $json ]] || return 0
-  jq -r '.worktree.path // .path // .worktree_path // .cwd // .worktree.cwd // empty' \
-    <<<"$json" 2>/dev/null
+  jq -r '.data.worktree.path // empty' <<<"$json" 2>/dev/null
 }
 
 # THE guardrail. Adopt an EXISTING worktree (already created by gwm) into herdr.
@@ -95,7 +97,7 @@ adopt_worktree() {
   # Adopt under the repo ROOT workspace. Opening from inside a linked-worktree
   # workspace is rejected (linked_worktree_source); herdr resolves the root from
   # any checkout cwd. Fall back to a plain open if it can't be resolved.
-  root_ws=$("$herdr" worktree list --cwd "$PWD" --json 2>/dev/null \
+  root_ws=$("$herdr" worktree list --cwd "$PWD" 2>/dev/null \
     | jq -r '.result.source.source_workspace_id // empty')
   if [[ -n $root_ws ]]; then
     exec "$herdr" worktree open --workspace "$root_ws" --path "$path" --label "$label" --focus

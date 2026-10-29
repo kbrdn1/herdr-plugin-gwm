@@ -19,4 +19,7 @@ command -v jq  >/dev/null || exit 0
 path=$(event_worktree_path "${HERDR_PLUGIN_EVENT_JSON:-}")
 [[ -n $path && -d $path ]] || exit 0
 
+# herdr runs hooks from the plugin dir, and gwm reads .gwm.toml + the copy source
+# from the CWD's repo. Run from the worktree: gwm walks back to its main checkout.
+cd -- "$path" || exit 0
 gwm bootstrap "$path" </dev/null
