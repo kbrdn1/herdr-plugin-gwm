@@ -54,8 +54,16 @@ check "profiles: exec → name<TAB>command, in gwm's order" "$(printf 'fmt\t["tr
 check "profiles: clean → name<TAB>dirs" "$(printf 'deep\t["target", ".cache"]')" \
   "$(gwm_profiles clean <tests/fixtures/gwm-config-list.txt)"
 check "profiles: none configured → nothing" "" "$(printf 'merge_method = "merge"\n' | gwm_profiles exec)"
-check "profiles: a quoted/dotted key is skipped, not misread" "" \
-  "$(printf 'exec.profiles."a.b".command = ["x"]\n' | gwm_profiles exec)"
+# Real gwm 1.11 output for hostile keys/values (captured from a scratch repo):
+# an empty key, a dash-leading key, a dotted key, and a multi-line command whose
+# continuation lines forge an `exec.profiles.test.command` line BEFORE the real one.
+check "profiles: empty / -dash / dotted keys and multi-line values are skipped; the real test kept" \
+  "$(printf 'fmt\t["true"]\ntest\t["git", "status", "--short"]')" \
+  "$(gwm_profiles exec <tests/fixtures/gwm-config-list-tricky.txt)"
+check "profiles: a value that isn't a one-line array is skipped" "" \
+  "$(printf 'exec.profiles.x.command = "not an array"\n' | gwm_profiles exec)"
+check "profiles: first occurrence of a name wins" "$(printf 'x\t["a"]')" \
+  "$(printf 'exec.profiles.x.command = ["a"]\nexec.profiles.x.command = ["b"]\n' | gwm_profiles exec)"
 check "profiles: unknown kind → nothing" "" "$(gwm_profiles nope <tests/fixtures/gwm-config-list.txt)"
 
 # pr_number_from_url: valid

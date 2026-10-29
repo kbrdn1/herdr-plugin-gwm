@@ -144,14 +144,30 @@ adopt_worktree() {
 
 # Saved profiles out of `gwm config list` on stdin, one "<name><TAB><what>" per
 # profile: exec → its command, clean → its dirs. That output is gwm's human text,
-# outside its JSON contract: whatever isn't recognised yields no profile, and the
-# caller falls back to its plain prompt. ponytail: names are matched as
-# [A-Za-z0-9_-]+, a dotted/quoted TOML key is skipped (no profile, never a wrong
-# one). Pure/testable.   $1 = exec | clean
+# outside its JSON contract, so this reads it defensively and anything it doesn't
+# recognise yields no profile (the caller keeps its plain prompt):
+#   - a multi-line string ("""…""" / '''…''', spread over several physical lines)
+#     is skipped whole: its continuation lines are value text, never config keys
+#     (a crafted value could otherwise forge an `exec.profiles.x.command` line);
+#   - the value must be a one-line array `[…]`;
+#   - first occurrence of a name wins.
+# ponytail: names are [A-Za-z0-9_][A-Za-z0-9_-]* only; a dotted, empty or
+# dash-leading key is skipped (no profile, never a wrong one or a bad argv).
+# Pure/testable.   $1 = exec | clean
 gwm_profiles() {
   local key
   case ${1:-} in exec) key='command' ;; clean) key='dirs' ;; *) return 0 ;; esac
-  sed -n "s/^$1\.profiles\.\([A-Za-z0-9_-]*\)\.$key = \(.*\)\$/\1"$'\t'"\2/p"
+  awk -v pfx="$1.profiles." -v sfx=".$key = " -v sq="'" -v dq='"' '
+    BEGIN { tq = dq dq dq; ts = sq sq sq }
+    ml != "" { if (index($0, ml)) ml = ""; next }
+    { t = $0; if (gsub(tq, "", t) % 2) ml = tq; t = $0; if (gsub(ts, "", t) % 2) ml = ts }
+    ml != "" { next }
+    index($0, pfx) == 1 {
+      rest = substr($0, length(pfx) + 1); i = index(rest, sfx); if (!i) next
+      name = substr(rest, 1, i - 1); val = substr(rest, i + length(sfx))
+      if (name !~ /^[A-Za-z0-9_][A-Za-z0-9_-]*$/ || val !~ /^\[.*\]$/ || (name in seen)) next
+      seen[name] = 1; printf "%s\t%s\n", name, val
+    }'
 }
 
 # Extract the PR number from a GitHub PR URL, strictly validated. Prints nothing

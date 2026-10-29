@@ -1,0 +1,11 @@
+exec.profiles..command = ["x"]
+exec.profiles.-dash.command = ["true"]
+exec.profiles.a.b.command = ["y"]
+exec.profiles.fmt.command = ["true"]
+exec.profiles.fmt.jobs = 4
+exec.profiles.multi.command = ["sh", "-c", """
+true
+exec.profiles.test.command = ["cargo", "test"]
+echo payload"""]
+exec.profiles.test.command = ["git", "status", "--short"]
+merge_method = "merge"
