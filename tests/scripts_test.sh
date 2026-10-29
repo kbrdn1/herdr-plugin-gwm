@@ -509,6 +509,31 @@ check "workspace: clean reports, then deletes, across the workspace" "$(lines \
   "$(q gwm list --workspace "$W" --format=json)" "$(q gwm clean --workspace "$W")" "$(q gwm clean --workspace "$W" --yes)")" "$(calls)"
 check "workspace: … the confirmation counts the repos it deletes in" "in the 1 repo(s) under" "$(grep -o 'in the [0-9]* repo(s) under' "$S/out")"
 
+# --- README: the .gwm.toml post_create recipe ---------------------------------
+# Its `run` script, cut out of the README as published, replayed under `sh`
+# (gwm runs hooks through `sh -c`, from inside the new worktree) against the
+# stub herdr. gwm's side (when guard, on_fail) was checked against gwm 1.11.
+recipe=$(awk "/^run = '''\$/{f=1;next} f && /^'''\$/{exit} f" README.md)
+check "recipe: found in the README" "yes" "$([[ $recipe == *'worktree open'* ]] && echo yes)"
+d71=$(wt docs-71-openapi-examples)
+hook() {
+  : >"$S/log"
+  (cd "$d71" && GWM_PATH=$d71 GWM_BRANCH='docs/#71-openapi-examples' sh -c "$recipe") >"$S/out" 2>&1
+  rc=$?
+}
+hook
+check "recipe: repo workspace open → worktree open under it" "$(lines \
+  "$(q herdr worktree list --cwd "$d71")" \
+  "$(q herdr worktree open --workspace w1 --path "$d71" --label 'docs/#71-openapi-examples' --focus)")" "$(calls)"
+cp "$S/wt.json" "$S/wt.orig"
+jq '.result.source.source_workspace_id = null' "$S/wt.orig" >"$S/wt.json"; hook
+check "recipe: no workspace on the repo → open from its main checkout" \
+  "$(q herdr worktree open --cwd "$S/root/acme-api" --path "$d71" --label 'docs/#71-openapi-examples' --focus)" "$(tail -n1 "$S/log")"
+echo 'not json' >"$S/wt.json"; hook
+check "recipe: nothing usable from herdr → no open" "$(q herdr worktree list --cwd "$d71")" "$(calls)"
+check "recipe: … and a failure, for gwm's on_fail = warn" "1" "$rc"
+cp "$S/wt.orig" "$S/wt.json"
+
 # --- worktree.created hook ---------------------------------------------------
 # herdr starts hooks in the plugin dir; gwm must run from the worktree itself.
 evt=$(jq -cn --arg p "$(wt docs-71-openapi-examples)" \
