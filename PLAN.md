@@ -163,8 +163,10 @@ Champs absents = non fournis pour cette invocation. En bash : `jq -r '.workspace
 ### 1.8 Commandes herdr consommées (via `$HERDR_BIN_PATH`)
 
 ```
-herdr worktree open [--workspace ROOT] --path PATH --label TEXT --focus  # ADOPTER (jamais --branch)
-herdr worktree list --cwd PATH                                    # root ws + mapping path -> open_workspace_id (JSON)
+herdr worktree open [--workspace ROOT | --cwd MAIN] --path PATH --label TEXT --focus  # ADOPTER (jamais --branch) ;
+                                                                  #   --cwd MAIN : aucun workspace sur ce repo → herdr le crée
+herdr worktree list --cwd PATH                                    # root ws + checkout principal + mapping path -> open_workspace_id (JSON) ;
+                                                                  #   PATH = le worktree CIBLE (accepte un worktree lié)
 herdr workspace focus <workspace_id>                              # switch : déjà reflété → focus
 herdr workspace close <workspace_id>                              # fermer le reflet après gwm remove (worktree lié : pas de --group, réservé au primaire depuis 0.9.0)
 herdr tab create [--workspace ID] --cwd PATH --label TEXT --focus # mode léger (open_mode=tab)
@@ -227,7 +229,8 @@ gwm clean [--profile P] [--yes]           # rapport (puis suppression des dossie
 gwm config list --prefix exec.profiles    # TEXTE, filtré par clé : noms de profils → pickers (noms seuls)
 gwm herdr <PATTERN> [-p|--direction D]    # (1.10+) ouvre en onglet / pane herdr — cf. README « plugin or gwm herdr? »
 gwm status / statusline / daemon          # non utilisés (le dashboard est le TUI gwm)
-gwm --workspace <DIR> ...                 # mode multi-repo (colonne REPO) — non câblé
+gwm --workspace <DIR> list|exec|clean     # mode multi-repo (champ .repo) ; create/remove/review : depuis le
+                                          #   checkout principal du repo (gwm refuse --workspace sur remove/review)
 ```
 
 Flux create réel (`bin/create.sh`) :
@@ -270,7 +273,7 @@ macos/linux.
 
 ## 4. Plan d'implémentation phasé (MVP d'abord)
 
-> **Statut (`dev`, manifest 0.2.0)** : phases 1-4 **implémentées** (create/switch/remove/review/exec/clean/dashboard + link_handler PR + event `worktree.created`, opérant depuis la PR #7). Reliquats : le mode multi-repo `gwm --workspace` n'est pas câblé, et le hook post-create `.gwm.toml` (sens gwm → herdr sans plugin, phase 3) n'est pas documenté. La voie sans plugin documentée est `gwm herdr` (onglet / pane).
+> **Statut (`dev`, manifest 0.2.0)** : phases 1-4 **implémentées** (create/switch/remove/review/exec/clean/dashboard + link_handler PR + event `worktree.created`, opérant depuis la PR #7). Mode multi-repo `gwm --workspace` câblé (issue #18). Reliquat : le hook post-create `.gwm.toml` (sens gwm → herdr sans plugin, phase 3) n'est pas documenté. La voie sans plugin documentée est `gwm herdr` (onglet / pane).
 
 ### Phase 1 — MVP : create / switch / remove
 - [x] `herdr-plugin.toml` : métadonnées + actions `create`/`switch`/`remove`
@@ -335,7 +338,13 @@ macos/linux.
       ou `-- bash -c <cmd>` ; `--jobs N` optionnel ; échec en rouge) et `clean`
       (jeu par défaut ou nom de profil, rapport → confirmation → `--yes` avec le
       même jeu).
-- [ ] support `--workspace` (multi-repo) : détecter le mode et passer `--repo`.
+- [x] support `--workspace` (multi-repo) : mode actif quand le dossier du workspace
+      n'est dans aucun work tree git. switch/remove listent avec `--workspace`
+      (clés `repo/nom`) ; create/review/remove tournent depuis le checkout principal
+      du repo choisi (plutôt que `--repo` : `gwm types` et `.gwm.toml` sont par repo,
+      et gwm refuse `--workspace` sur remove/review) ; review sur lien cliqué = repo
+      dont un remote est celui de l'URL, sinon refus ; exec/clean passent
+      `--workspace`. Le dashboard s'appuie sur l'autodétection de gwm (`[Y/n]`).
 
 ---
 

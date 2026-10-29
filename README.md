@@ -40,7 +40,7 @@ There is no `[[build]]` step — it's plain bash, so `plugin link` and `plugin i
 
 ## the 30-second tour
 
-From any pane inside a herdr workspace that sits in a gwm-managed repo:
+From any pane inside a herdr workspace that sits in a gwm-managed repo (or in a directory holding several, see [multi-repo mode](#multi-repo-mode)):
 
 ```bash
 herdr plugin action invoke gwm.switch      # fzf over gwm worktrees → focus if open, else adopt
@@ -72,9 +72,19 @@ description = "gwm: switch worktree"
 - **`gwm.dashboard`** — surfaces gwm's own TUI in a zoomed pane: the live worktree table with PR/CI/dirty/ahead-behind badges, no reimplementation.
 - **`worktree.created` event** — a worktree created on the herdr side (outside gwm) is enriched by `gwm bootstrap` (`.env` copy, hooks, preset), run from inside that worktree so gwm uses its repo's `.gwm.toml` (herdr starts hooks in the plugin dir). The path comes from the event envelope (`.data.worktree.path`). Adopts fire `worktree.opened`, not `.created`, so this never double-runs on the plugin's own work.
 - **Adopt-only guardrail** — every mutation goes through `gwm`; herdr is a reflection. A source-level test asserts no script ever emits `worktree create` or `worktree open --branch` (see [tests](#testing)).
-- **Root-workspace adoption** — adopts under the repo's *root* workspace, so invoking from inside a linked-worktree pane doesn't hit herdr's `linked_worktree_source` rejection.
+- **Root-workspace adoption** — adopts under the *root* workspace of the worktree's own repo (herdr is asked about the target, not the caller), so invoking from inside a linked-worktree pane doesn't hit herdr's `linked_worktree_source` rejection. With no workspace open on that repo yet, the adopt starts from its main checkout and herdr creates the repo's workspace to group it under.
 - **Popup pickers** — `gwm.switch` and `gwm.remove` open as a session-modal floating popup (herdr ≥ 0.7.4): the tiled layout doesn't move, Escape reaches fzf, and the popup closes when the script exits. The panes whose *output* is the point (`exec`, `clean`) or that run long git/network work (`create`, `review`) stay split — a modal that blocks the session for a 30s clone reads as frozen. `dashboard` stays zoomed. Placement and size (`width`/`height`) are declared once, on the `[[panes]]` entrypoint; the popup actions pass no `--placement`, which would override it.
 - **Picker theming** — pickers inherit your `FZF_DEFAULT_OPTS` (colors, borders) by default, but neutralize file-browser-oriented bits (a `bat` preview, `ctrl-r` bound to `git ls-files`, `transform-header` on focus) that would garble non-file lines or rebind keys. Set `fzf_theme = "clean"` for a fully isolated picker.
+
+## multi-repo mode
+
+Open a herdr workspace on a directory that is **not** a git repo itself but holds repos one level below it (e.g. `~/Projects`), and the actions drive all of them through gwm's `--workspace` mode. Nothing to configure: the mode is on whenever the workspace's directory sits outside any git work tree.
+
+- **`gwm.switch` / `gwm.remove`** list every repo's worktrees (`gwm list --workspace`), keyed `repo/name` in the picker, so the same worktree name in two repos can't be confused. gwm has no `--workspace` for `remove`, so the preview and the removal run from the main checkout of the picked worktree's repo.
+- **`gwm.create`** asks for the repo first (no picker with a single repo), then runs the usual flow in its main checkout: the types and `.gwm.toml` are that repo's.
+- **`gwm.review`** runs in one repo too (gwm rejects `--workspace` there, and `gh pr list` reads the repo's remote): picked by hand for the `gh` picker; for a **clicked** PR URL, only the repos with a remote on that GitHub repo are candidates (https, ssh or scp form, read from git config, no network), and none means a refusal, never PR #N of another repo.
+- **`gwm.exec` / `gwm.clean`** fan out over every repo (`gwm exec --workspace` / `gwm clean --workspace`); the prompt and the confirmation say how many repos. Saved profiles are per repo and gwm can't list them outside one, so only the typed command and the default dir set are offered here.
+- **`gwm.dashboard`** runs bare `gwm`, which itself offers to open such a directory as a workspace (`[Y/n]`, yes by default).
 
 ## plugin or `gwm herdr`?
 
@@ -137,9 +147,9 @@ bash tests/scripts_test.sh   # bin/*.sh against stub gwm / herdr / fzf / gh
 shellcheck bin/*.sh lib/*.sh # config in .shellcheckrc (follows the lib/common.sh source)
 ```
 
-`scripts_test.sh` runs every script with stub `gwm` / `fzf` / `gh` first on `PATH` and a stub herdr reachable only through `$HERDR_BIN_PATH` (a bare `herdr` hits a failing trap), fed from `tests/fixtures/` (real gwm 1.11 `list` / `types` / `config list --prefix …profiles` output with paths rewritten; herdr's `worktree list` / `pane list` and `gh pr list` built from their documented formats), and asserts the exact argv each one sends to gwm and herdr, plus the candidates fed to the switch, create, exec and clean pickers: switch (adopt / focus / tab create or focus, badges), remove (dry-run preview, N / y / D, workspace and tab reflections), create (type list, positional, `--issue`, `auto`, `057`, bad issue), review (forged URL, link click, `gh` picker), exec (typed command, profiles, `--jobs`), clean (default set, profiles), and the `worktree.created` hook (bootstrap run from inside the worktree).
+`scripts_test.sh` runs every script with stub `gwm` / `fzf` / `gh` first on `PATH` and a stub herdr reachable only through `$HERDR_BIN_PATH` (a bare `herdr` hits a failing trap), fed from `tests/fixtures/` (real gwm 1.11 `list` / `list --workspace` / `types` / `config list --prefix …profiles` output with paths rewritten; herdr's `worktree list` / `pane list` and `gh pr list` built from their documented formats), and asserts the exact argv each one sends to gwm and herdr, plus the candidates fed to the switch, create, exec and clean pickers: switch (adopt / focus / tab create or focus, badges), remove (dry-run preview, N / y / D, workspace and tab reflections), create (type list, positional, `--issue`, `auto`, `057`, bad issue), review (forged URL, link click, `gh` picker), exec (typed command, profiles, `--jobs`), clean (default set, profiles), multi-repo mode (`repo/name` keys, the same name in two repos, gwm run from the picked repo's main checkout, a clicked PR matched to its repo's remote or refused, exec/clean fanned out with `--workspace`), and the `worktree.created` hook (bootstrap run from inside the worktree). Every fixture checkout is a git repo and the sandbox root isn't, so single-repo and multi-repo runs share the same tree.
 
-`common_test.sh` covers the pure logic: context-cwd fallback, `open_mode` / `fzf_theme` resolution, the fzf wrapper (theme inheritance, and surviving `set -u` without `FZF_DEFAULT_OPTS`), PR-URL parsing (with forged-URL rejection), the gwm↔herdr path mapping (trailing-slash normalization), which tabs only reflect a worktree (`herdr_tabs_for_path` / `herdr_closable_tabs`: every pane inside, on a `/` boundary; closable ones never empty a workspace), the context fields popups rely on (`ctx_field`), saved exec/clean profile names out of real `gwm config list --prefix` captures, hostile keys and multi-line values included (`gwm_profile_names`), event-payload path extraction (from herdr's event envelope, flat shapes rejected), the argv `adopt_worktree` sends to a stub herdr (root-workspace resolution, `worktree open --path`, `open_mode = "tab"`), and the adopt-only guardrail.
+`common_test.sh` covers the pure logic: context-cwd fallback, `open_mode` / `fzf_theme` resolution, the fzf wrapper (theme inheritance, and surviving `set -u` without `FZF_DEFAULT_OPTS`), PR-URL parsing (with forged-URL rejection), the gwm↔herdr path mapping (trailing-slash normalization), which tabs only reflect a worktree (`herdr_tabs_for_path` / `herdr_closable_tabs`: every pane inside, on a `/` boundary; closable ones never empty a workspace), the context fields popups rely on (`ctx_field`), saved exec/clean profile names out of real `gwm config list --prefix` captures, hostile keys and multi-line values included (`gwm_profile_names`), event-payload path extraction (from herdr's event envelope, flat shapes rejected), the argv `adopt_worktree` sends to a stub herdr (root-workspace resolution from the target's repo, the main-checkout fallback, `worktree open --path`, `open_mode = "tab"`), multi-repo detection and picker keys (`ws_root`, `wt_row`, `ws_repos`, `ws_repo_main`), GitHub remote matching (`remote_is_github_repo`, `pr_repo_from_url`), and the adopt-only guardrail.
 
 CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs shellcheck and both suites on every pull request and on pushes to `dev` and `main`.
 
@@ -157,7 +167,7 @@ herdr plugin unlink gwm && herdr plugin link "$PWD"
 
 See [PLAN.md](PLAN.md) for the full design rationale and the complete herdr plugin API / gwm surface reference.
 
-Multi-repo `gwm --workspace` mode isn't wired through the actions yet — the plugin operates on the single repo of the current workspace. Everything else (create / switch / remove / review / exec / clean / dashboard / bootstrap-on-create) is implemented.
+Everything is implemented: create / switch / remove / review / exec / clean / dashboard / bootstrap-on-create, in a single repo or across a [multi-repo](#multi-repo-mode) directory.
 
 ## license
 
