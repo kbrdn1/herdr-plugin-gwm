@@ -73,8 +73,13 @@ panes=$(sed 's|@ROOT@|/r|g' tests/fixtures/herdr-pane-list.json)
 d71=/r/worktrees/acme-api/docs-71-openapi-examples
 check "tabs: only all-inside tabs; mixed, -old prefix, no-cwd kept; w9 skipped" "w1:t3" \
   "$(printf '%s' "$panes" | herdr_tabs_for_path "$d71" w9)"
-check "tabs: without a skipped workspace, its tab counts too" "$(printf 'w1:t3\nw9:t1')" \
+check "tabs: w9:t1 is w9's only tab → kept (closing it would close w9)" "w1:t3" \
   "$(printf '%s' "$panes" | herdr_tabs_for_path "$d71/")"
+# A workspace whose EVERY tab sits in the worktree (another worktree's workspace
+# with agents, say) keeps them all: emptying it via tab close would close it.
+two='{"result":{"panes":[{"workspace_id":"w5","tab_id":"w5:t1","cwd":"/r/wt"},{"workspace_id":"w5","tab_id":"w5:t2","cwd":"/r/wt/src"},{"workspace_id":"w6","tab_id":"w6:t1","cwd":"/r/wt"},{"workspace_id":"w6","tab_id":"w6:t2","cwd":"/r/other"}]}}'
+check "tabs: never the last tabs of a workspace; only w6:t1 (w6 keeps w6:t2)" "w6:t1" \
+  "$(printf '%s' "$two" | herdr_tabs_for_path /r/wt)"
 check "tabs: a pane with no cwd keeps its tab" "" \
   "$(printf '%s' '{"result":{"panes":[{"workspace_id":"w1","tab_id":"w1:t9","cwd":"/r/wt"},{"workspace_id":"w1","tab_id":"w1:t9"}]}}' | herdr_tabs_for_path /r/wt)"
 check "tabs: empty path matches nothing" "" "$(printf '%s' "$panes" | herdr_tabs_for_path "")"

@@ -73,15 +73,20 @@ herdr_ws_id_for_path() {
 # Given a worktree path, print the herdr tabs that only reflect it: EVERY pane of
 # the tab has its cwd inside the worktree (the path itself or below it, on a "/"
 # boundary). A pane elsewhere, or with no cwd, keeps its tab. Tabs of workspace
-# $2 are skipped (that whole workspace is closed on its own). Reads
-# `herdr pane list` output on stdin. Pure/testable.
+# $2 are skipped (that whole workspace is closed on its own). And a tab is never
+# the last one of its workspace: herdr closes the workspace with its last tab,
+# and that workspace is not ours to close (another worktree, its agents), so a
+# workspace whose every tab qualifies keeps them all. Reads `herdr pane list`
+# output on stdin. Pure/testable.
 herdr_tabs_for_path() {
   local path=${1%/}
   [[ -n $path ]] || return 0
   jq -r --arg p "$path" --arg skip "${2:-}" '
-    [.result.panes[]? | select(.workspace_id != $skip)] | group_by(.tab_id)[]
-    | select(all(.[]; (.cwd // "" | rtrimstr("/")) as $c | $c == $p or ($c | startswith($p + "/"))))
-    | .[0].tab_id' 2>/dev/null
+    [ [.result.panes[]? | select(.workspace_id != $skip)] | group_by(.tab_id)[]
+      | { ws: .[0].workspace_id, tab: .[0].tab_id,
+          inside: all(.[]; (.cwd // "" | rtrimstr("/")) as $c | $c == $p or ($c | startswith($p + "/"))) } ]
+    | . as $tabs | .[] | select(.inside) | .ws as $w
+    | select(any($tabs[]; .ws == $w and (.inside | not))) | .tab' 2>/dev/null
 }
 
 # Extract the worktree path from a herdr event payload (HERDR_PLUGIN_EVENT_JSON).
