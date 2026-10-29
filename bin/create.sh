@@ -16,9 +16,10 @@ die() { printf '\n\033[31m%s\033[0m press any key to close' "$1"; read -rn1; exi
 
 command -v gwm >/dev/null || die "gwm not found on PATH"
 
-# 1. branch type — fzf over `gwm types` first column, plain read as fallback.
+# 1. branch type — fzf over `gwm types` first column (its "(source: …)" footer is
+#    not a type), plain read as fallback.
 if command -v fzf >/dev/null; then
-  type=$(gwm types 2>/dev/null | awk 'NF{print $1}' \
+  type=$(gwm types 2>/dev/null | awk 'NF && $1 !~ /^\(/ {print $1}' \
     | wt_fzf --prompt='branch type ❯ ' --header='↵ to pick · esc to cancel')
 else
   printf 'Branch type (feat/fix/…): '; read -r type
