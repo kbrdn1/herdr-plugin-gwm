@@ -1,0 +1,14 @@
+exec.profiles.-dash.command = ["true"]
+exec.profiles.box.command = ["git", "status"]
+exec.profiles.box.container.image = "alpine"
+exec.profiles.box.container.runtime = "sh"
+exec.profiles.box.container.selinux_relabel = false
+exec.profiles.fmt.command = ["true"]
+exec.profiles.fmt.jobs = 4
+exec.profiles.multi.command = ["sh", "-c", """
+x
+y""", """
+
+exec.profiles.test.command = ["cargo", "test"]
+"""]
+exec.profiles.test.command = ["git", "status", "--short"]

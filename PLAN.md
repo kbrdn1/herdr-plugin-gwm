@@ -222,8 +222,9 @@ gwm remove <PATTERN> --dry-run            # aperçu (nom, chemin, branche) ; mot
 gwm remove <PATTERN> [--delete-branch]    # ne demande PAS de confirmation (le plugin la fait) ; --delete-branch
                                           #   supprime même non mergée, pointe journalisée → gwm undo
 gwm bootstrap [TARGET]                    # re-run bootstrap ; lit .gwm.toml depuis le repo du CWD
-gwm exec -- <cmd>                         # fan-out sur les worktrees NON-main (rollup ✓/✗)
-gwm clean [--yes]                         # rapport (puis suppression des dossiers git-ignorés), non-main
+gwm exec [--jobs N] (-- <cmd> | --profile P)  # fan-out sur les worktrees NON-main (rollup ✓/✗)
+gwm clean [--profile P] [--yes]           # rapport (puis suppression des dossiers git-ignorés), non-main
+gwm config list --prefix exec.profiles    # TEXTE, filtré par clé : noms de profils → pickers (noms seuls)
 gwm herdr <PATTERN> [-p|--direction D]    # (1.10+) ouvre en onglet / pane herdr — cf. README « plugin or gwm herdr? »
 gwm status / statusline / daemon          # non utilisés (le dashboard est le TUI gwm)
 gwm --workspace <DIR> ...                 # mode multi-repo (colonne REPO) — non câblé
@@ -247,10 +248,12 @@ adopt_worktree "$path" "$branch"               # → herdr worktree open --path 
   comme l'a fait jj-workspace. Rung le plus bas qui tient.
 - **Glue-only** : chaque script = `gwm <cmd> [--format=json]` → transforme →
   `$HERDR_BIN_PATH <cmd>`. Zéro logique métier dupliquée. On bâtit sur le
-  contrat json gelé 1.0 de gwm → surface stable par design. Deux lectures hors
+  contrat json gelé 1.0 de gwm → surface stable par design. Trois lectures hors
   contrat : le picker de types parse la sortie texte de `gwm types` (1re colonne,
-  sans le pied `(source: …)`), et le badge d'agent lit le champ `agents`, tier
-  expérimental (absent ou de forme inattendue, il ne fait que disparaître).
+  sans le pied `(source: …)`), les pickers exec/clean lisent les noms de
+  profils dans `gwm config list --prefix` (noms seuls ; une valeur multi-ligne = pas
+  de picker), et le badge d'agent lit le champ
+  `agents`, tier expérimental (absent ou de forme inattendue, il disparaît).
 - **open_mode configurable** (comme worktrunk) dans
   `$HERDR_PLUGIN_CONFIG_DIR/config.toml` :
   - `workspace` (défaut) → `herdr worktree open --path` : le worktree apparaît
@@ -275,7 +278,7 @@ macos/linux.
       `creator` (split), `picker`/`remover` (popup 70 %×60 %).
 - [x] `lib/common.sh` : `herdr_bin`, `ctx_cwd`, `open_mode`, `fzf_theme`,
       `wt_fzf`, `herdr_ws_id_for_path`, `herdr_tabs_for_path`,
-      `herdr_closable_tabs`, `ctx_field`, `event_worktree_path`,
+      `herdr_closable_tabs`, `ctx_field`, `gwm_profile_names`, `event_worktree_path`,
       `pr_number_from_url`, et le **garde-fou** `adopt_worktree <path> <label>`
       (seul chemin qui OUVRE un worktree dans herdr : `worktree open --path` ou
       `tab create --cwd` ; les autres appels ne font que focus/fermer un reflet).
@@ -328,8 +331,10 @@ macos/linux.
 ### Phase 4 — vue live & ops
 - [x] pane `dashboard` (placement `zoomed`) : lance le TUI gwm tel quel. Une vue
       custom sur `gwm daemon` reste YAGNI tant que le TUI suffit.
-- [x] actions `exec` (`gwm exec -- bash -c <cmd>`) et `clean` (rapport →
-      confirmation → `gwm clean --yes`).
+- [x] actions `exec` (profil enregistré choisi par son NOM → `--profile=<nom>`,
+      ou `-- bash -c <cmd>` ; `--jobs N` optionnel ; échec en rouge) et `clean`
+      (jeu par défaut ou nom de profil, rapport → confirmation → `--yes` avec le
+      même jeu).
 - [ ] support `--workspace` (multi-repo) : détecter le mode et passer `--repo`.
 
 ---
@@ -370,6 +375,9 @@ Pas de `[[build]]` (bash, rien à compiler) → `plugin link` marche direct, et
   pane sans cwd = dehors ; la version fermable ne vide jamais un workspace),
 - `ctx_field` (workspace / tab de l'appelant : un popup ne reçoit ni
   `HERDR_WORKSPACE_ID` ni `HERDR_TAB_ID`),
+- `gwm_profile_names` (noms seuls depuis de vraies captures `gwm config list
+  --prefix` : clés à tiret / pointées ignorées, champ connu exigé, une valeur
+  multi-ligne `"""` / `'''` = aucun profil, donc pas de picker),
 - `event_worktree_path` sur une enveloppe herdr complète (forme plate rejetée),
 - `adopt_worktree` contre un `HERDR_BIN_PATH` stub qui journalise son argv,
 - le garde-fou : aucun chemin de code n'émet `worktree create` / `--branch`.
@@ -383,7 +391,7 @@ ubuntu-latest) peut remonter ce qu'un 0.11 local ne voit plus (SC2119).
 `$HERDR_BIN_PATH` (un `herdr` nu tombe sur un piège), nourris de fixtures tirées de
 vraies sorties gwm 1.11 (`tests/fixtures/`, chemins réécrits ; `worktree list` et
 `pane list` herdr suivent le schéma v0.9.5), et vérifie l'argv exact envoyé à gwm et à herdr,
-plus les candidats reçus par les pickers switch et create.
+plus les candidats reçus par les pickers switch, create, exec et clean.
 
 Ce que les stubs ne remplacent pas : le vrai gwm (contre `~/gwm-demo` en lecture
 seule, un repo scratch pour ce qui mute, un clone relié à la forge pour

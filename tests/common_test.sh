@@ -48,6 +48,29 @@ check "wt_fzf drops FZF_DEFAULT_OPTS (clean)" "[]" \
   "$(FZF_DEFAULT_OPTS='--color=dark' PATH="$stub:$PATH" HERDR_PLUGIN_CONFIG_DIR=$tmp wt_fzf </dev/null)"
 rm -rf "$tmp" "$stub"
 
+# gwm_profile_names: NAMES only, out of real `gwm config list --prefix <kind>.profiles`
+# captures (gwm 1.11). The exec one holds hostile keys: -dash, a dotted "a.b", a
+# container profile, and a spoofed `lint.command = [...] x` key.
+check "profile names: exec → known-field names, -dash and dotted skipped (lint = spoof, gwm refuses it)" \
+  "$(printf 'box\nfmt\nlint\ntest')" "$(gwm_profile_names exec <tests/fixtures/gwm-config-profiles-exec.txt)"
+check "profile names: never a command or an array in the output" "" \
+  "$(gwm_profile_names exec <tests/fixtures/gwm-config-profiles-exec.txt | grep -F '[')"
+check 'profile names: any multi-line string (""") → no picker at all' "" \
+  "$(gwm_profile_names exec <tests/fixtures/gwm-config-profiles-exec-multiline.txt)"
+check "profile names: ''' counts too" "" \
+  "$(printf '%s\n' "exec.profiles.a.command = ['''" "x'''] " | gwm_profile_names exec)"
+check "profile names: clean → dirs profiles" "$(printf 'deep\ndefault')" \
+  "$(gwm_profile_names clean <tests/fixtures/gwm-config-profiles-clean.txt)"
+check "profile names: first occurrence wins" "x" \
+  "$(printf 'exec.profiles.x.command = ["a"]\nexec.profiles.x.jobs = 2\n' | gwm_profile_names exec)"
+check "profile names: a dotted key ending in .container doesn't make a name" "" \
+  "$(printf 'exec.profiles.ci.container.command = ["evil"]\n' | gwm_profile_names exec)"
+check "profile names: a real container field still does" "box" \
+  "$(printf 'exec.profiles.box.container.image = "alpine"\n' | gwm_profile_names exec)"
+check "profile names: an unknown field doesn't make a name" "" \
+  "$(printf 'exec.profiles.x.weird = 1\n' | gwm_profile_names exec)"
+check "profile names: unknown kind → nothing" "" "$(gwm_profile_names nope <tests/fixtures/gwm-config-profiles-clean.txt)"
+
 # pr_number_from_url: valid
 check "pr url valid" "42" "$(pr_number_from_url 'https://github.com/o/r/pull/42')"
 # pr_number_from_url: rejects non-PR / wrong host / trailing path

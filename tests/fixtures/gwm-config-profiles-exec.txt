@@ -1,0 +1,9 @@
+exec.profiles.-dash.command = ["true"]
+exec.profiles.a.b.command = ["y"]
+exec.profiles.box.command = ["git", "status"]
+exec.profiles.box.container.image = "alpine"
+exec.profiles.box.container.selinux_relabel = false
+exec.profiles.fmt.command = ["true"]
+exec.profiles.fmt.jobs = 4
+exec.profiles.lint.command = ["cargo"] x.command = ["z"]
+exec.profiles.test.command = ["git", "status", "--short"]
