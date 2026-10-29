@@ -96,14 +96,19 @@ chmod +x "$S"/bin/* "$S/herdr-bin/herdr"
 # root (w1): herdr rejects an open from there (linked_worktree_source), so adopts
 # must target w1.
 export STUB=$S PATH="$S/bin:$PATH" HERDR_PLUGIN_ROOT=$root HERDR_BIN_PATH=$S/herdr-bin/herdr \
-  HERDR_PLUGIN_CONFIG_DIR=$S/config HERDR_WORKSPACE_ID=w7
-unset FZF_DEFAULT_OPTS GWM_REVIEW_URL HERDR_PLUGIN_EVENT_JSON GWM_FAIL HERDR_FAIL HERDR_TAB_ID
+  HERDR_PLUGIN_CONFIG_DIR=$S/config
+# Popups get no HERDR_WORKSPACE_ID / HERDR_TAB_ID (herdr omits the pane identity):
+# the caller's workspace and tab reach the scripts only through the context JSON.
+unset FZF_DEFAULT_OPTS GWM_REVIEW_URL HERDR_PLUGIN_EVENT_JSON GWM_FAIL HERDR_FAIL \
+  HERDR_WORKSPACE_ID HERDR_TAB_ID HERDR_PANE_ID
 
 # run <script> <stdin> [cwd] — fresh logs, then $rc / $S/log / $S/cwd.log
 run() {
   : >"$S/log"; : >"$S/cwd.log"; : >"$S/fzf.in"
   local cwd=${3:-$caller}
-  (cd "$cwd" && HERDR_PLUGIN_CONTEXT_JSON="{\"workspace_cwd\":\"$cwd\"}" bash "$root/bin/$1" <<<"$2") >"$S/out" 2>&1
+  local ctx; ctx=$(jq -cn --arg cwd "$cwd" --arg ws "${CTX_WS:-w7}" --arg tab "${CTX_TAB:-w7:t1}" \
+    '{workspace_id: $ws, tab_id: $tab, workspace_cwd: $cwd, focused_pane_cwd: $cwd}')
+  (cd "$cwd" && HERDR_PLUGIN_CONTEXT_JSON=$ctx bash "$root/bin/$1" <<<"$2") >"$S/out" 2>&1
   rc=$?
 }
 calls() { cat "$S/log"; }
@@ -158,6 +163,14 @@ check "switch: open_mode=tab, a tab already only on it (w7:t2) → tab focus, no
   "$(q herdr worktree list --cwd "$caller")" \
   "$(q herdr pane list)" \
   "$(q herdr tab focus w7:t2)")" "$(calls)"
+# The only tab of its workspace (w8, opened in fix-57/src) is still one to focus:
+# the never-the-last-tab rule is for closing, not for focusing.
+jq --arg c "$(wt fix-57-rate-limit-headers)/src" '.result.panes |= (map(select(.tab_id != "w7:t2"))
+  + [{pane_id: "w8:p1", terminal_id: "t-12", workspace_id: "w8", tab_id: "w8:t1", focused: false, cwd: $c, agent_status: "unknown"}])' \
+  "$S/panes.json" >"$S/panes.w8"; cp "$S/panes.json" "$S/panes.orig"; cp "$S/panes.w8" "$S/panes.json"
+FZF_PICK=fix-57 run switch.sh ""
+check "switch: open_mode=tab focuses a workspace's ONLY tab on it (w8:t1)" "$(q herdr tab focus w8:t1)" "$(tail -n1 "$S/log")"
+cp "$S/panes.orig" "$S/panes.json"
 rm -f "$S/config/config.toml"
 
 # --- remove ------------------------------------------------------------------
@@ -196,10 +209,19 @@ check "remove: … and the agents that will be stopped" \
 
 # herdr kills this popup with the tab it was opened from: when that tab is one
 # of the reflections, it goes LAST, after the removed worktree's workspace.
-HERDR_WORKSPACE_ID=w1 HERDR_TAB_ID=w1:t3 FZF_PICK=docs-71 run remove.sh "y"
+CTX_WS=w1 CTX_TAB=w1:t3 FZF_PICK=docs-71 run remove.sh "y"
 check "remove: the caller's own tab is closed last" "$(lines \
   "$(q herdr workspace close w9)" \
   "$(q herdr tab close w1:t3)")" "$(tail -n2 "$S/log")"
+
+# Another workspace (w8) whose ONLY tab sits in docs-71: closing that tab would
+# close w8 itself, so it is never a candidate.
+jq --arg c "$(wt docs-71-openapi-examples)" '.result.panes += [{pane_id: "w8:p1", terminal_id: "t-12",
+  workspace_id: "w8", tab_id: "w8:t1", focused: false, cwd: $c, agent_status: "working", agent: "codex"}]' \
+  "$S/panes.json" >"$S/panes.w8b"; cp "$S/panes.json" "$S/panes.orig"; cp "$S/panes.w8b" "$S/panes.json"
+FZF_PICK=docs-71 run remove.sh "y"
+check "remove: a workspace's last tab is never closed (w8:t1 kept, w8 lives)" "" "$(grep -F 'w8' "$S/log")"
+cp "$S/panes.orig" "$S/panes.json"
 
 HERDR_FAIL='tab close w1:t3' FZF_PICK=docs-71 run remove.sh "y"
 check "remove: a tab herdr refuses to close is reported, the workspace still closed" \
