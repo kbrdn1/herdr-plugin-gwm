@@ -343,7 +343,8 @@ macos/linux.
       (clés `repo/nom`) ; create/review/remove tournent depuis le checkout principal
       du repo choisi (plutôt que `--repo` : `gwm types` et `.gwm.toml` sont par repo,
       et gwm refuse `--workspace` sur remove/review) ; review sur lien cliqué = repo
-      dont un remote est celui de l'URL, sinon refus ; exec/clean passent
+      dont l'`origin` est celui de l'URL (là où `gwm review` va chercher la PR),
+      sinon refus ; exec/clean passent
       `--workspace`. Le dashboard s'appuie sur l'autodétection de gwm (`[Y/n]`).
 
 ---
