@@ -94,9 +94,12 @@ _herdr_tabs() { # <path> <skip-ws> <close: true|false>
 herdr_tabs_for_path() { _herdr_tabs "$1" "${2:-}" false; }
 herdr_closable_tabs() { _herdr_tabs "$1" "${2:-}" true; }
 
-# Multi-repo (gwm --workspace) mode: a herdr workspace opened on a directory
-# that is not itself inside a git work tree (e.g. ~/Projects) drives every repo
-# one level below it. Prints that directory, nothing in single-repo mode.
+# Multi-repo (gwm --workspace) mode: an action run from a directory that is not
+# itself inside a git work tree (e.g. ~/Projects) drives every repo one level
+# below it. That directory is the panes' --cwd, herdr's workspace_cwd: the
+# FOCUSED PANE's current cwd (the workspace's own directory only as a fallback),
+# so a pane that cd'd out of its repo switches the mode too. Prints that
+# directory, nothing in single-repo mode.
 #   $1 = directory (defaults to $PWD)
 ws_root() {
   local dir=${1:-$PWD}

@@ -5,7 +5,8 @@
 #    we extract the PR number (strict, via pr_number_from_url) and skip the picker.
 #  - direct: fzf over `gh pr list` (or a plain prompt) to choose the PR.
 # Multi-repo mode: runs in the main checkout of one repo below the workspace —
-# for a clicked URL, only a repo with a remote on the URL's GitHub repo.
+# for a clicked URL, only a repo whose origin is the URL's GitHub repo (gwm
+# review fetches the PR from origin).
 # gwm stays the source of truth; herdr only adopts.
 set -uo pipefail
 
