@@ -4,6 +4,8 @@
 #  - link click: the review action forwards the clicked URL as $GWM_REVIEW_URL;
 #    we extract the PR number (strict, via pr_number_from_url) and skip the picker.
 #  - direct: fzf over `gh pr list` (or a plain prompt) to choose the PR.
+# Multi-repo mode: runs in the main checkout of one repo below the workspace —
+# for a clicked URL, only a repo with a remote on the URL's GitHub repo.
 # gwm stays the source of truth; herdr only adopts.
 set -uo pipefail
 
@@ -15,16 +17,26 @@ die() { printf '\n\033[31m%s\033[0m press any key to close' "$1"; read -rn1; exi
 command -v gwm >/dev/null || die "gwm not found on PATH"
 
 # 1. resolve the PR number.
+pr='' url_repo=''
 if [[ -n ${GWM_REVIEW_URL:-} ]]; then
   # A forged URL can't get past this: only a strictly-anchored PR URL yields a
   # number, and only the number reaches gwm.
   pr=$(pr_number_from_url "$GWM_REVIEW_URL") || die "not a GitHub PR URL: $GWM_REVIEW_URL"
-elif command -v fzf >/dev/null && command -v gh >/dev/null; then
+  url_repo=$(pr_repo_from_url "$GWM_REVIEW_URL")
+fi
+# Multi-repo mode: gwm review has no --workspace (gwm rejects it), and `gh pr
+# list` reads the cwd's remote — enter the repo first.
+ws=$(ws_root)
+if [[ -n $ws ]]; then
+  ws_enter_repo "$ws" "$url_repo"
+  case $? in 0) ;; 1) exit 0 ;; *) die "no repo to review the PR in (see above)" ;; esac
+fi
+if [[ -z $pr ]] && command -v fzf >/dev/null && command -v gh >/dev/null; then
   sel=$(gh pr list --limit 50 2>/dev/null \
     | wt_fzf --prompt='review PR ❯ ' --header='↵ to review · esc to cancel')
   [[ -z $sel ]] && exit 0
   pr=${sel%%[[:space:]]*}; pr=${pr#\#}
-else
+elif [[ -z $pr ]]; then
   printf 'PR number (digits): '; read -r pr
 fi
 [[ $pr =~ ^[0-9]+$ ]] || die "invalid PR number: ${pr:-<empty>}"

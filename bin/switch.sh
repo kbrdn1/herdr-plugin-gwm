@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# gwm: switch worktree. fzf over `gwm list`; if herdr already reflects the picked
-# worktree, focus its workspace, else adopt it. gwm stays the source of truth.
+# gwm: switch worktree. fzf over `gwm list` (`--workspace` across every repo
+# below a non-repo workspace); if herdr already reflects the picked worktree,
+# focus its workspace, else adopt it. gwm stays the source of truth.
 # No `set -e`: fzf esc and no-match are normal exits handled by hand.
 set -uo pipefail
 
@@ -12,17 +13,19 @@ die() { printf '\n\033[31m%s\033[0m press any key to close' "$1"; read -rn1; exi
 command -v fzf >/dev/null || die "fzf not found on PATH"
 
 herdr=$(herdr_bin)
-wtjson=$(gwm list --format=json 2>/dev/null)
+ws=$(ws_root)   # non-empty = multi-repo mode on that directory
+wtjson=$(gwm list ${ws:+--workspace "$ws"} --format=json 2>/dev/null)
 [[ -z $wtjson || $wtjson == "[]" ]] && { printf '\033[33mNo worktrees.\033[0m\n'; sleep 2; exit 0; }
 
-# name is the first field (kebab, no spaces) so we recover it by cutting field 1.
+# The key (name, or repo/name in multi-repo mode) is the first field, recovered
+# by cutting field 1.
 # Badges: issue / PR / dirty / ahead / behind, then the most recent agent session
 # (`@claude`, `*` = active in the last 5 min; gwm ≥ 1.3, experimental and
 # optional: a missing or reshaped `agents` field just shows no badge). CI status is
 # skipped — it'd need a per-worktree `gwm status` network call.
-sel=$(printf '%s\n' "$wtjson" | jq -r '
+sel=$(printf '%s\n' "$wtjson" | jq -r "$WT_KEY_JQ"'
   .[] | select(.branch != null) |
-  [ .name,
+  [ key,
     (if .issue then "#\(.issue)" else "" end),
     (if .pr then "PR#\(.pr)" else "" end),
     (if .status.is_dirty then "±" else "" end),
@@ -32,14 +35,17 @@ sel=$(printf '%s\n' "$wtjson" | jq -r '
   ] | map(select(. != "")) | join("  ")' \
   | wt_fzf --prompt='switch to ❯ ' --header='↵ to switch · esc to cancel')
 [[ -z $sel ]] && exit 0
-name=${sel%%[[:space:]]*}
+key=${sel%%[[:space:]]*}
 
-path=$(printf '%s\n' "$wtjson" | jq -r --arg n "$name" '.[] | select(.name == $n) | .path' | head -n1)
-branch=$(printf '%s\n' "$wtjson" | jq -r --arg n "$name" '.[] | select(.name == $n) | .branch' | head -n1)
-[[ -z $path || $path == null ]] && die "couldn't resolve path for: $name"
+row=$(wt_row "$key" <<<"$wtjson")
+path=$(jq -r '.path // empty' <<<"$row" 2>/dev/null)
+[[ -z $path ]] && die "couldn't resolve path for: $key"
+branch=$(jq -r '.branch // empty' <<<"$row") name=$(jq -r '.name' <<<"$row")
 
-# Already reflected in herdr? → focus that workspace. Else adopt it.
-wsid=$("$herdr" worktree list --cwd "$PWD" 2>/dev/null | herdr_ws_id_for_path "$path")
+# Already reflected in herdr? → focus that workspace. Else adopt it. herdr is
+# asked about the TARGET's repo (--cwd "$path"): in multi-repo mode the caller's
+# directory isn't even a repo.
+wsid=$("$herdr" worktree list --cwd "$path" 2>/dev/null | herdr_ws_id_for_path "$path")
 if [[ -n $wsid ]]; then
   exec "$herdr" workspace focus "$wsid"
 fi

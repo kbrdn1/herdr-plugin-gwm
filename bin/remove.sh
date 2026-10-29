@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# gwm: remove worktree. fzf over removable worktrees (not main) → gwm's own
+# gwm: remove worktree. fzf over removable worktrees (not main; every repo's in
+# multi-repo mode) → gwm's own
 # `--dry-run` preview → confirm → `gwm remove` → close herdr's reflections (the
 # worktree's workspace, and tabs left only on it). gwm is the source of truth.
 # gwm remove does NOT prompt, so the confirmation gate lives here.
@@ -14,12 +15,13 @@ die() { printf '\n\033[31m%s\033[0m press any key to close' "$1"; read -rn1; exi
 command -v fzf >/dev/null || die "fzf not found on PATH"
 
 herdr=$(herdr_bin)
-wtjson=$(gwm list --format=json 2>/dev/null)
+ws=$(ws_root)   # non-empty = multi-repo mode on that directory
+wtjson=$(gwm list ${ws:+--workspace "$ws"} --format=json 2>/dev/null)
 
 # Removable = every real worktree except main (the primary checkout can't go).
-cands=$(printf '%s\n' "$wtjson" | jq -r '
+cands=$(printf '%s\n' "$wtjson" | jq -r "$WT_KEY_JQ"'
   .[] | select(.is_main != true and .branch != null) |
-  [ .name,
+  [ key,
     (if .issue then "#\(.issue)" else "" end),
     (if .pr then "PR#\(.pr)" else "" end),
     (if .status.is_dirty then "±dirty" else "" end)
@@ -29,11 +31,21 @@ cands=$(printf '%s\n' "$wtjson" | jq -r '
 sel=$(printf '%s\n' "$cands" \
   | wt_fzf --prompt='remove worktree ❯ ' --header='↵ to select · esc to cancel')
 [[ -z $sel ]] && exit 0
-name=${sel%%[[:space:]]*}
+key=${sel%%[[:space:]]*}
 
-path=$(printf '%s\n' "$wtjson" | jq -r --arg n "$name" '.[] | select(.name == $n) | .path' | head -n1)
-[[ -z $path || $path == null ]] && die "couldn't resolve path for: $name"
-dirty=$(printf '%s\n' "$wtjson" | jq -r --arg n "$name" '.[] | select(.name == $n) | .status.is_dirty // false' | head -n1)
+row=$(wt_row "$key" <<<"$wtjson")
+path=$(jq -r '.path // empty' <<<"$row" 2>/dev/null)
+[[ -z $path ]] && die "couldn't resolve path for: $key"
+name=$(jq -r '.name' <<<"$row") dirty=$(jq -r '.status.is_dirty // false' <<<"$row")
+
+# Multi-repo mode: gwm remove has no --workspace (gwm rejects it), so every gwm
+# call below runs from the main checkout of the picked worktree's repo, where
+# the name resolves as in single-repo mode. herdr calls carry their own --cwd.
+repo=$(jq -r '.repo // empty' <<<"$row")
+if [[ -n $repo ]]; then
+  main=$(ws_repo_main "$repo" <<<"$wtjson")
+  { [[ -n $main ]] && cd -- "$main"; } || die "couldn't enter the main checkout of $repo"
+fi
 
 # Preview with gwm's own resolution (name, path, branch). An ambiguous or unknown
 # pattern fails here, before anything is asked.
@@ -43,7 +55,7 @@ printf '%s\n\n' "$preview"
 # Map herdr's reflections now — before the question, so it can name them, and
 # before the removal, after which the path is gone: the worktree's own
 # workspace, and the tabs elsewhere whose panes all sit inside it.
-wsid=$("$herdr" worktree list --cwd "$PWD" 2>/dev/null | herdr_ws_id_for_path "$path")
+wsid=$("$herdr" worktree list --cwd "$path" 2>/dev/null | herdr_ws_id_for_path "$path")
 panes=$("$herdr" pane list 2>/dev/null)
 tabs=$(herdr_closable_tabs "$path" "$wsid" <<<"$panes")
 if [[ -n $wsid || -n $tabs ]]; then
