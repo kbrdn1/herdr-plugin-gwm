@@ -67,6 +67,19 @@ wtlist2='{"result":{"worktrees":[{"path":"/repo/wt/b"}]}}'
 check "ws id: present but not open is empty" "" \
   "$(printf '%s' "$wtlist2" | herdr_ws_id_for_path '/repo/wt/b')"
 
+# herdr_tabs_for_path: tabs whose EVERY pane sits in the worktree (on a "/"
+# boundary). Fixture = herdr `pane list` shape (v0.9.5 PaneInfo), paths rewritten.
+panes=$(sed 's|@ROOT@|/r|g' tests/fixtures/herdr-pane-list.json)
+d71=/r/worktrees/acme-api/docs-71-openapi-examples
+check "tabs: only all-inside tabs; mixed, -old prefix, no-cwd kept; w9 skipped" "w1:t3" \
+  "$(printf '%s' "$panes" | herdr_tabs_for_path "$d71" w9)"
+check "tabs: without a skipped workspace, its tab counts too" "$(printf 'w1:t3\nw9:t1')" \
+  "$(printf '%s' "$panes" | herdr_tabs_for_path "$d71/")"
+check "tabs: a pane with no cwd keeps its tab" "" \
+  "$(printf '%s' '{"result":{"panes":[{"workspace_id":"w1","tab_id":"w1:t9","cwd":"/r/wt"},{"workspace_id":"w1","tab_id":"w1:t9"}]}}' | herdr_tabs_for_path /r/wt)"
+check "tabs: empty path matches nothing" "" "$(printf '%s' "$panes" | herdr_tabs_for_path "")"
+check "tabs: \"/\" matches nothing" "" "$(printf '%s' "$panes" | herdr_tabs_for_path /)"
+
 # event_worktree_path: hooks get the full event envelope (EventEnvelope serialized
 # by herdr, shape taken from its 0.9.5 source); the path is .data.worktree.path.
 # The old top-level guesses (.worktree.path/.path/.cwd) never matched it, and

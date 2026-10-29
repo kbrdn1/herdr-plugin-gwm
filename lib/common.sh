@@ -3,8 +3,9 @@
 #
 # GOLDEN RULE (see PLAN.md §0): gwm is the source of truth. This plugin NEVER
 # creates a worktree on the herdr side — it ADOPTS what gwm already created.
-# The only herdr mutation commands allowed are `worktree open --path` and
-# `workspace close`. Never introduce `herdr worktree create` or `--branch`.
+# The only herdr mutations allowed are reflections: `worktree open --path`,
+# `workspace focus|close`, `tab create|focus|close`. Never introduce
+# `herdr worktree create` or `--branch`.
 
 # herdr binary to call back into (portable across unix socket / windows pipe).
 herdr_bin() { printf '%s' "${HERDR_BIN_PATH:-herdr}"; }
@@ -67,6 +68,20 @@ herdr_ws_id_for_path() {
   jq -r --arg p "$path" \
     '.result.worktrees[]? | select((.path | rtrimstr("/")) == $p) | .open_workspace_id // empty' \
     2>/dev/null | head -n1
+}
+
+# Given a worktree path, print the herdr tabs that only reflect it: EVERY pane of
+# the tab has its cwd inside the worktree (the path itself or below it, on a "/"
+# boundary). A pane elsewhere, or with no cwd, keeps its tab. Tabs of workspace
+# $2 are skipped (that whole workspace is closed on its own). Reads
+# `herdr pane list` output on stdin. Pure/testable.
+herdr_tabs_for_path() {
+  local path=${1%/}
+  [[ -n $path ]] || return 0
+  jq -r --arg p "$path" --arg skip "${2:-}" '
+    [.result.panes[]? | select(.workspace_id != $skip)] | group_by(.tab_id)[]
+    | select(all(.[]; (.cwd // "" | rtrimstr("/")) as $c | $c == $p or ($c | startswith($p + "/"))))
+    | .[0].tab_id' 2>/dev/null
 }
 
 # Extract the worktree path from a herdr event payload (HERDR_PLUGIN_EVENT_JSON).
