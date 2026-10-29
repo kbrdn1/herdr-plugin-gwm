@@ -34,16 +34,17 @@ check "fzf_theme default user" "user" "$(HERDR_PLUGIN_CONFIG_DIR=/nonexistent fz
 tmp=$(mktemp -d); printf 'fzf_theme = "clean"\n' >"$tmp/config.toml"
 check "fzf_theme clean from config" "clean" "$(HERDR_PLUGIN_CONFIG_DIR=$tmp fzf_theme)"
 
-# wt_fzf: a stub fzf echoes the FZF_DEFAULT_OPTS it was handed. This suite runs
+# wt_fzf: a stub fzf echoes the FZF_DEFAULT_OPTS it was handed, bracketed so a
+# picker that died (empty output) never passes for "no opts". This suite runs
 # under `set -u` like the scripts, so an unset var must not kill the picker
 # (it used to: "unbound variable", read by callers as a cancelled pick).
-stub=$(mktemp -d); printf '#!/usr/bin/env bash\nprintf "%%s" "$FZF_DEFAULT_OPTS"\n' >"$stub/fzf"
+stub=$(mktemp -d); printf '#!/usr/bin/env bash\nprintf "[%%s]" "$FZF_DEFAULT_OPTS"\n' >"$stub/fzf"
 chmod +x "$stub/fzf"
-check "wt_fzf survives unset FZF_DEFAULT_OPTS" "ok" \
-  "$(unset FZF_DEFAULT_OPTS; PATH="$stub:$PATH" HERDR_PLUGIN_CONFIG_DIR=/nonexistent wt_fzf </dev/null && printf ok)"
-check "wt_fzf inherits FZF_DEFAULT_OPTS (user)" "--color=dark" \
+check "wt_fzf survives unset FZF_DEFAULT_OPTS" "[]" \
+  "$(unset FZF_DEFAULT_OPTS; PATH="$stub:$PATH" HERDR_PLUGIN_CONFIG_DIR=/nonexistent wt_fzf </dev/null)"
+check "wt_fzf inherits FZF_DEFAULT_OPTS (user)" "[--color=dark]" \
   "$(FZF_DEFAULT_OPTS='--color=dark' PATH="$stub:$PATH" HERDR_PLUGIN_CONFIG_DIR=/nonexistent wt_fzf </dev/null)"
-check "wt_fzf drops FZF_DEFAULT_OPTS (clean)" "" \
+check "wt_fzf drops FZF_DEFAULT_OPTS (clean)" "[]" \
   "$(FZF_DEFAULT_OPTS='--color=dark' PATH="$stub:$PATH" HERDR_PLUGIN_CONFIG_DIR=$tmp wt_fzf </dev/null)"
 rm -rf "$tmp" "$stub"
 
