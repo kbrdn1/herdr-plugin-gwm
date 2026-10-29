@@ -73,7 +73,8 @@ exit 1
 EOF
 cat >"$S/bin/fzf" <<'EOF'
 #!/usr/bin/env bash
-grep -m1 -F -- "${FZF_PICK:-}" || exit 1
+in=$(cat); printf '%s\n' "$in" >"$STUB/fzf.in"   # the candidates the picker got
+grep -m1 -F -- "${FZF_PICK:-}" <<<"$in" || exit 1
 EOF
 cat >"$S/bin/gh" <<'EOF'
 #!/usr/bin/env bash
@@ -109,6 +110,19 @@ check "switch: not open → adopt under the root workspace" "$(lines \
   "$(q herdr worktree open --workspace w1 --path "$(wt fix-57-rate-limit-headers)" --label 'fix/#57-rate-limit-headers' --focus)")" "$(calls)"
 
 # docs-71 is open in w9: neither the caller's workspace (w7) nor the root (w1).
+check "switch: picker badges (issue, ±, @agent from gwm list's agents field)" "$(lines \
+  'fix-57-rate-limit-headers  #57  @codex' \
+  'docs-71-openapi-examples  #71  @claude' \
+  'chore-63-bump-axum  #63  ±' \
+  'feat-42-payment-webhooks  #42  ±  @claude')" "$(grep -v '^acme-api' "$S/fzf.in")"
+
+jq '(.[] | select(.name == "feat-42-payment-webhooks") | .agents.top.freshness) = "active"' "$S/list.json" >"$S/list.active"
+cp "$S/list.json" "$S/list.idle"; cp "$S/list.active" "$S/list.json"
+FZF_PICK=feat-42 run switch.sh ""
+check "switch: an active session is starred (@claude*)" \
+  'feat-42-payment-webhooks  #42  ±  @claude*' "$(grep '^feat-42' "$S/fzf.in")"
+cp "$S/list.idle" "$S/list.json"
+
 FZF_PICK=docs-71 run switch.sh ""
 check "switch: already open → focus ITS workspace" "$(lines \
   "$(q gwm list --format=json)" \
@@ -169,6 +183,18 @@ check "create: no issue match → gwm path fallback on the typed desc" "$(lines 
   "$(q gwm path payment-webhooks --format=json)" \
   "$(q herdr worktree list --cwd "$caller")" \
   "$(q herdr worktree open --workspace w1 --path "$(wt feat-42-payment-webhooks)" --label 'feat/#42-payment-webhooks' --focus)")" "$(calls)"
+
+check "create: type picker = gwm types (no \"(source:\" footer), then auto" \
+  "feat fix hotfix docs test refactor chore perf ci build auto" "$(paste -sd' ' "$S/fzf.in")"
+
+FZF_PICK=auto run create.sh $'57'
+check "create: auto → gwm create --issue N, type left to the issue's labels" "$(lines \
+  "$(q gwm types)" \
+  "$(q gwm create --issue 57)" \
+  "$(q gwm list --format=json)" \
+  "$(q herdr worktree list --cwd "$caller")" \
+  "$adopt57")" "$(calls)"
+check "create: auto asks no description" "" "$(grep -o 'Description' "$S/out")"
 
 FZF_PICK=fix run create.sh $'abc\nx'
 check "create: non-digit issue → refused before gwm create" "$(q gwm types)" "$(calls)"
