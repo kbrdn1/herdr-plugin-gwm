@@ -117,14 +117,18 @@ check "switch: already open → focus ITS workspace" "$(lines \
 
 printf 'open_mode = "tab"\n' >"$S/config/config.toml"
 FZF_PICK=fix-57 run switch.sh ""
-check "switch: open_mode=tab → tab create" \
-  "$(q herdr tab create --workspace w7 --cwd "$(wt fix-57-rate-limit-headers)" --label 'fix/#57-rate-limit-headers' --focus)" \
-  "$(tail -n1 "$S/log")"
+check "switch: open_mode=tab → tab create in the caller's workspace" "$(lines \
+  "$(q gwm list --format=json)" \
+  "$(q herdr worktree list --cwd "$caller")" \
+  "$(q herdr tab create --workspace w7 --cwd "$(wt fix-57-rate-limit-headers)" --label 'fix/#57-rate-limit-headers' --focus)")" "$(calls)"
 rm -f "$S/config/config.toml"
 
 # --- remove ------------------------------------------------------------------
 FZF_PICK=fix-57 run remove.sh "n"
 check "remove: N → nothing removed, nothing closed" "$(q gwm list --format=json)" "$(calls)"
+
+FZF_PICK=acme-api run remove.sh "y"
+check "remove: the main checkout is never offered" "$(q gwm list --format=json)" "$(calls)"
 
 FZF_PICK=docs-71 run remove.sh "y"
 check "remove: y → map the workspace first, gwm remove, close ITS workspace" "$(lines \
@@ -149,7 +153,22 @@ check "create: empty desc → gwm create --issue N --type T" \
 check "create: --issue path still adopts by issue" "$adopt57" "$(tail -n1 "$S/log")"
 
 FZF_PICK=fix run create.sh $'057\n'
-check "create: 057 resolves to issue 57 (numeric match)" "$adopt57" "$(tail -n1 "$S/log")"
+check "create: 057 resolves to issue 57 (numeric match)" "$(lines \
+  "$(q gwm types)" \
+  "$(q gwm create --issue 057 --type fix)" \
+  "$(q gwm list --format=json)" \
+  "$(q herdr worktree list --cwd "$caller")" \
+  "$adopt57")" "$(calls)"
+
+# No row carries issue 99: a typed desc falls back to `gwm path <desc>`.
+FZF_PICK=feat run create.sh $'99\npayment-webhooks'
+check "create: no issue match → gwm path fallback on the typed desc" "$(lines \
+  "$(q gwm types)" \
+  "$(q gwm create feat 99 payment-webhooks)" \
+  "$(q gwm list --format=json)" \
+  "$(q gwm path payment-webhooks --format=json)" \
+  "$(q herdr worktree list --cwd "$caller")" \
+  "$(q herdr worktree open --workspace w1 --path "$(wt feat-42-payment-webhooks)" --label 'feat/#42-payment-webhooks' --focus)")" "$(calls)"
 
 FZF_PICK=fix run create.sh $'abc\nx'
 check "create: non-digit issue → refused before gwm create" "$(q gwm types)" "$(calls)"
