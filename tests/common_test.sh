@@ -63,6 +63,10 @@ check "profile names: clean → dirs profiles" "$(printf 'deep\ndefault')" \
   "$(gwm_profile_names clean <tests/fixtures/gwm-config-profiles-clean.txt)"
 check "profile names: first occurrence wins" "x" \
   "$(printf 'exec.profiles.x.command = ["a"]\nexec.profiles.x.jobs = 2\n' | gwm_profile_names exec)"
+check "profile names: a dotted key ending in .container doesn't make a name" "" \
+  "$(printf 'exec.profiles.ci.container.command = ["evil"]\n' | gwm_profile_names exec)"
+check "profile names: a real container field still does" "box" \
+  "$(printf 'exec.profiles.box.container.image = "alpine"\n' | gwm_profile_names exec)"
 check "profile names: an unknown field doesn't make a name" "" \
   "$(printf 'exec.profiles.x.weird = 1\n' | gwm_profile_names exec)"
 check "profile names: unknown kind → nothing" "" "$(gwm_profile_names nope <tests/fixtures/gwm-config-profiles-clean.txt)"

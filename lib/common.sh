@@ -145,18 +145,19 @@ adopt_worktree() {
 # Saved profile NAMES for a picker, from `gwm config list --prefix <kind>.profiles`
 # on stdin (gwm filters by key before printing, so no other section leaks in).
 # Names only, never their command: picking X means "run profile X as .gwm.toml
-# defines it" — exactly gwm's own `--profile X` — so the picker makes no claim it
+# defines it" (gwm's resolved config: .gwm.toml over the global one) — exactly
+# gwm's own `--profile X` — so the picker makes no claim it
 # could have misread (a container runtime, a spoofed key). That output is gwm's
 # human text, outside its JSON contract, so: any multi-line string in it (""" /
 # ''') means no picker at all, and the caller keeps its plain prompt.
 # ponytail: names are [A-Za-z0-9_][A-Za-z0-9_-]* on a known field only (exec:
-# command|jobs|container.*, clean: dirs), first occurrence wins; one multi-line
+# command|jobs|container.{image,runtime,extra_args,selinux_relabel}, clean: dirs), first occurrence wins; one multi-line
 # value anywhere in the section disables the picker. A spoofed key can still
 # surface a name that doesn't exist: gwm then refuses it. Pure/testable.
 #   $1 = exec | clean
 gwm_profile_names() {
   local fields text
-  case ${1:-} in exec) fields='command|jobs|container\.[a-z_]+' ;; clean) fields='dirs' ;; *) return 0 ;; esac
+  case ${1:-} in exec) fields='command|jobs|container\.(image|runtime|extra_args|selinux_relabel)' ;; clean) fields='dirs' ;; *) return 0 ;; esac
   text=$(cat)
   case $text in *'"""'* | *"'''"*) return 0 ;; esac
   printf '%s\n' "$text" \
