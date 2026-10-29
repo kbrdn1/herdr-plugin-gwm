@@ -67,23 +67,33 @@ wtlist2='{"result":{"worktrees":[{"path":"/repo/wt/b"}]}}'
 check "ws id: present but not open is empty" "" \
   "$(printf '%s' "$wtlist2" | herdr_ws_id_for_path '/repo/wt/b')"
 
-# herdr_tabs_for_path: tabs whose EVERY pane sits in the worktree (on a "/"
-# boundary). Fixture = herdr `pane list` shape (v0.9.5 PaneInfo), paths rewritten.
+# herdr_tabs_for_path / herdr_closable_tabs: tabs whose EVERY pane sits in the
+# worktree (on a "/" boundary); the closable ones never empty a workspace.
+# Fixture = herdr `pane list` shape (v0.9.5 PaneInfo), paths rewritten.
 panes=$(sed 's|@ROOT@|/r|g' tests/fixtures/herdr-pane-list.json)
 d71=/r/worktrees/acme-api/docs-71-openapi-examples
 check "tabs: only all-inside tabs; mixed, -old prefix, no-cwd kept; w9 skipped" "w1:t3" \
   "$(printf '%s' "$panes" | herdr_tabs_for_path "$d71" w9)"
-check "tabs: w9:t1 is w9's only tab → kept (closing it would close w9)" "w1:t3" \
+check "tabs: w9's only tab still counts as a tab on it (focus)" "$(printf 'w1:t3\nw9:t1')" \
   "$(printf '%s' "$panes" | herdr_tabs_for_path "$d71/")"
+check "closable: … but is never closed (it would close w9)" "w1:t3" \
+  "$(printf '%s' "$panes" | herdr_closable_tabs "$d71/")"
 # A workspace whose EVERY tab sits in the worktree (another worktree's workspace
-# with agents, say) keeps them all: emptying it via tab close would close it.
+# with agents, say): its tabs can be focused, never closed (that empties it).
 two='{"result":{"panes":[{"workspace_id":"w5","tab_id":"w5:t1","cwd":"/r/wt"},{"workspace_id":"w5","tab_id":"w5:t2","cwd":"/r/wt/src"},{"workspace_id":"w6","tab_id":"w6:t1","cwd":"/r/wt"},{"workspace_id":"w6","tab_id":"w6:t2","cwd":"/r/other"}]}}'
-check "tabs: never the last tabs of a workspace; only w6:t1 (w6 keeps w6:t2)" "w6:t1" \
+check "tabs: every all-inside tab, whatever its workspace" "$(printf 'w5:t1\nw5:t2\nw6:t1')" \
   "$(printf '%s' "$two" | herdr_tabs_for_path /r/wt)"
+check "closable: never the last tabs of a workspace; only w6:t1 (w6 keeps w6:t2)" "w6:t1" \
+  "$(printf '%s' "$two" | herdr_closable_tabs /r/wt)"
 check "tabs: a pane with no cwd keeps its tab" "" \
   "$(printf '%s' '{"result":{"panes":[{"workspace_id":"w1","tab_id":"w1:t9","cwd":"/r/wt"},{"workspace_id":"w1","tab_id":"w1:t9"}]}}' | herdr_tabs_for_path /r/wt)"
 check "tabs: empty path matches nothing" "" "$(printf '%s' "$panes" | herdr_tabs_for_path "")"
-check "tabs: \"/\" matches nothing" "" "$(printf '%s' "$panes" | herdr_tabs_for_path /)"
+check "tabs: \"/\" matches nothing" "" "$(printf '%s' "$panes" | herdr_closable_tabs /)"
+
+# ctx_field: popups carry the caller's workspace/tab only in the context JSON.
+check "ctx_field reads a context field" "w1:t3" \
+  "$(HERDR_PLUGIN_CONTEXT_JSON='{"workspace_id":"w1","tab_id":"w1:t3"}' ctx_field tab_id)"
+check "ctx_field is empty without context" "" "$(unset HERDR_PLUGIN_CONTEXT_JSON; ctx_field tab_id)"
 
 # event_worktree_path: hooks get the full event envelope (EventEnvelope serialized
 # by herdr, shape taken from its 0.9.5 source); the path is .data.worktree.path.
@@ -113,6 +123,11 @@ check "adopt: worktree open --path under root ws" \
  adopt_worktree "$wtdir" feat/x)
 check "adopt: open_mode=tab → tab create" \
   "tab create --workspace w5 --cwd $wtdir --label feat/x --focus" "$(cat "$hstub/log")"
+: >"$hstub/log"
+(export HSTUB_LOG=$hstub/log HERDR_BIN_PATH=$hstub/herdr HERDR_PLUGIN_CONFIG_DIR=$hstub HERDR_PLUGIN_CONTEXT_JSON='{"workspace_id":"w6"}'
+ unset HERDR_WORKSPACE_ID; adopt_worktree "$wtdir" feat/x)
+check "adopt: tab mode in a popup takes the workspace from the context" \
+  "tab create --workspace w6 --cwd $wtdir --label feat/x --focus" "$(cat "$hstub/log")"
 rm -rf "$hstub" "$wtdir"
 
 # Source-level guardrail: no script may create a worktree on the herdr side.
