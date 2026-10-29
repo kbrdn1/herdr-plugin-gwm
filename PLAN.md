@@ -209,6 +209,7 @@ gwm types                                 # types de branche (1re colonne → pi
 gwm path <PATTERN> --format=json          # -> { name, path, branch }
 gwm list --format=json                    # docs/schema/worktree-list.schema.json ; champs lus :
                                           #   name, path, branch, issue, pr, is_main, status.{is_dirty,ahead,behind}
+                                          #   + agents.top.{kind,freshness} (≥ 1.3, tier expérimental, optionnel)
 gwm review <PR#>                          # PR → worktree review/pr-<N>-<author>-<slug>, sans bootstrap par défaut
 gwm remove <PATTERN>...                   # ne demande PAS de confirmation (le plugin la fait), branche gardée
 gwm bootstrap [TARGET]                    # re-run bootstrap ; lit .gwm.toml depuis le repo du CWD
@@ -222,6 +223,7 @@ gwm --workspace <DIR> ...                 # mode multi-repo (colonne REPO) — n
 Flux create réel (`bin/create.sh`) :
 ```bash
 gwm create "$type" "$issue" "$desc"            # ou, desc vide : gwm create --issue "$issue" --type "$type"
+                                               # ou, (auto) : gwm create --issue "$issue" (type depuis les labels)
 row=$(gwm list --format=json | jq -c --arg i "$issue" 'map(select((.issue|tostring) == $i)) | last // empty')
 # repli (desc saisie seulement) si aucune ligne ne porte l'issue : gwm path "$desc" --format=json
 adopt_worktree "$path" "$branch"               # → herdr worktree open --path … (jamais --branch)
@@ -236,7 +238,9 @@ adopt_worktree "$path" "$branch"               # → herdr worktree open --path 
   comme l'a fait jj-workspace. Rung le plus bas qui tient.
 - **Glue-only** : chaque script = `gwm <cmd> [--format=json]` → transforme →
   `$HERDR_BIN_PATH <cmd>`. Zéro logique métier dupliquée. On bâtit sur le
-  contrat json gelé 1.0 de gwm → surface stable par design.
+  contrat json gelé 1.0 de gwm → surface stable par design. Seule exception :
+  le badge d'agent lit le champ `agents`, tier expérimental ; absent ou de
+  forme inattendue, il ne fait que disparaître.
 - **open_mode configurable** (comme worktrunk) dans
   `$HERDR_PLUGIN_CONFIG_DIR/config.toml` :
   - `workspace` (défaut) → `herdr worktree open --path` : le worktree apparaît
@@ -264,8 +268,9 @@ macos/linux.
       `pr_number_from_url`, et le **garde-fou** `adopt_worktree <path> <label>`
       (seul chemin vers herdr : `worktree open --path` ou `tab create --cwd`).
 - [x] `bin/create.sh` : fzf sur `gwm types` (sans son pied `(source: …)`) +
-      `auto` → issue → desc (vide = `gwm create --issue N --type T`, gwm ≥ 1.10 ;
-      `auto` = `gwm create --issue N`, type depuis les labels, pas de desc) →
+      `(auto)` → issue → desc (vide = `gwm create --issue N --type T`, gwm ≥ 1.10 ;
+      `(auto)` = `gwm create --issue N`, type depuis les labels, pas de desc ;
+      entre parenthèses pour ne jamais masquer un type configuré) →
       résolution par l'issue dans `gwm list` (repli `gwm path` si desc saisie)
       → `adopt_worktree`.
 - [x] `bin/switch.sh` : `gwm list --format=json` → fzf (badges issue/PR/±/↑/↓
@@ -348,7 +353,8 @@ ubuntu-latest) peut remonter ce qu'un 0.11 local ne voit plus (SC2119).
 `gwm` / `fzf` / `gh` en tête du `PATH` et un herdr joignable seulement via
 `$HERDR_BIN_PATH` (un `herdr` nu tombe sur un piège), nourris de fixtures tirées de
 vraies sorties gwm 1.11 (`tests/fixtures/`, chemins réécrits ; le `worktree list`
-herdr suit le schéma v0.9.5), et vérifie l'argv exact envoyé à gwm et à herdr.
+herdr suit le schéma v0.9.5), et vérifie l'argv exact envoyé à gwm et à herdr,
+plus les candidats reçus par les pickers switch et create.
 
 Ce que les stubs ne remplacent pas : le vrai gwm (contre `~/gwm-demo` en lecture
 seule, un repo scratch pour ce qui mute, un clone relié à la forge pour
