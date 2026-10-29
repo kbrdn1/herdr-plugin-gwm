@@ -23,6 +23,7 @@ S=$(mktemp -d); trap 'rm -rf "$S"' EXIT
 mkdir -p "$S/bin" "$S/herdr-bin" "$S/config"
 sed "s|@ROOT@|$S/root|g" tests/fixtures/gwm-list.json >"$S/list.json"
 sed "s|@ROOT@|$S/root|g" tests/fixtures/herdr-worktree-list.json >"$S/wt.json"
+sed "s|@ROOT@|$S/root|g" tests/fixtures/herdr-pane-list.json >"$S/panes.json"
 cp tests/fixtures/gwm-types.txt "$S/types.txt"
 cp tests/fixtures/gh-pr-list.txt "$S/gh.txt"
 jq -r '.[].path' "$S/list.json" | while read -r p; do mkdir -p "$p"; done
@@ -54,8 +55,18 @@ case $1 in
         '. + [.[1] | .name = "decoy" | .id = "decoy" | .path = $d | .branch = $b | .issue = null]' \
         "$STUB/list.json" >"$STUB/list.tmp" && mv "$STUB/list.tmp" "$STUB/list.json"
     fi ;;
+  remove) # --dry-run prints gwm's own resolution, in its real format
+    # GWM_REMOVE_GONE=1: the real removal deletes the directory (then GWM_FAIL
+    # can model a post_remove hook failing after the fact).
+    if [[ ${GWM_REMOVE_GONE:-} == 1 && " $* " != *" --dry-run "* ]]; then
+      rm -rf -- "$(jq -r --arg n "$2" '.[] | select(.name == $n) | .path' "$STUB/list.json")"
+    fi
+    if [[ " $* " == *" --dry-run "* ]]; then
+      jq -r --arg n "$2" \
+        '.[] | select(.name == $n) | "would remove:\n  name:   \(.name)\n  path:   \(.path)\n  branch: \(.branch)"' "$STUB/list.json"
+    fi ;;
 esac
-[[ $1 == "${GWM_FAIL:-}" ]] && exit 1   # GWM_FAIL=<subcommand> makes that call fail
+[[ "$*" == "${GWM_FAIL:-}" ]] && exit 1   # GWM_FAIL='<exact argv>' makes that one call fail
 exit 0
 EOF
 # herdr is only reachable through $HERDR_BIN_PATH (what herdr injects; it does not
@@ -64,6 +75,11 @@ cat >"$S/herdr-bin/herdr" <<'EOF'
 #!/usr/bin/env bash
 out=$(printf '%q ' herdr "$@"); printf '%s\n' "${out% }" >>"$STUB/log"
 [[ "$1 $2" == "worktree list" ]] && cat "$STUB/wt.json"
+if [[ "$1 $2" == "pane list" ]]; then   # panes.next, if any, answers every later call
+  n=$(cat "$STUB/pane.calls" 2>/dev/null || echo 0); echo $((n + 1)) >"$STUB/pane.calls"
+  if ((n)) && [[ -f $STUB/panes.next ]]; then cat "$STUB/panes.next"; else cat "$STUB/panes.json"; fi
+fi
+[[ "$*" == "${HERDR_FAIL:-}" ]] && exit 1   # HERDR_FAIL='<exact argv>' makes that call fail
 exit 0
 EOF
 cat >"$S/bin/herdr" <<'EOF'
@@ -88,14 +104,19 @@ chmod +x "$S"/bin/* "$S/herdr-bin/herdr"
 # root (w1): herdr rejects an open from there (linked_worktree_source), so adopts
 # must target w1.
 export STUB=$S PATH="$S/bin:$PATH" HERDR_PLUGIN_ROOT=$root HERDR_BIN_PATH=$S/herdr-bin/herdr \
-  HERDR_PLUGIN_CONFIG_DIR=$S/config HERDR_WORKSPACE_ID=w7
-unset FZF_DEFAULT_OPTS GWM_REVIEW_URL HERDR_PLUGIN_EVENT_JSON GWM_FAIL
+  HERDR_PLUGIN_CONFIG_DIR=$S/config
+# Popups get no HERDR_WORKSPACE_ID / HERDR_TAB_ID (herdr omits the pane identity):
+# the caller's workspace and tab reach the scripts only through the context JSON.
+unset FZF_DEFAULT_OPTS GWM_REVIEW_URL HERDR_PLUGIN_EVENT_JSON GWM_FAIL HERDR_FAIL \
+  HERDR_WORKSPACE_ID HERDR_TAB_ID HERDR_PANE_ID
 
 # run <script> <stdin> [cwd] — fresh logs, then $rc / $S/log / $S/cwd.log
 run() {
-  : >"$S/log"; : >"$S/cwd.log"; : >"$S/fzf.in"
+  : >"$S/log"; : >"$S/cwd.log"; : >"$S/fzf.in"; rm -f "$S/pane.calls"
   local cwd=${3:-$caller}
-  (cd "$cwd" && HERDR_PLUGIN_CONTEXT_JSON="{\"workspace_cwd\":\"$cwd\"}" bash "$root/bin/$1" <<<"$2") >"$S/out" 2>&1
+  local ctx; ctx=$(jq -cn --arg cwd "$cwd" --arg ws "${CTX_WS:-w7}" --arg tab "${CTX_TAB:-w7:t1}" \
+    '{workspace_id: $ws, tab_id: $tab, workspace_cwd: $cwd, focused_pane_cwd: $cwd}')
+  (cd "$cwd" && HERDR_PLUGIN_CONTEXT_JSON=$ctx bash "$root/bin/$1" <<<"$2") >"$S/out" 2>&1
   rc=$?
 }
 calls() { cat "$S/log"; }
@@ -138,26 +159,105 @@ check "switch: already open → focus ITS workspace" "$(lines \
   "$(q herdr workspace focus w9)")" "$(calls)"
 
 printf 'open_mode = "tab"\n' >"$S/config/config.toml"
-FZF_PICK=fix-57 run switch.sh ""
-check "switch: open_mode=tab → tab create in the caller's workspace" "$(lines \
+FZF_PICK=feat-42 run switch.sh ""
+check "switch: open_mode=tab, no tab on it yet → tab create in the caller's workspace" "$(lines \
   "$(q gwm list --format=json)" \
   "$(q herdr worktree list --cwd "$caller")" \
-  "$(q herdr tab create --workspace w7 --cwd "$(wt fix-57-rate-limit-headers)" --label 'fix/#57-rate-limit-headers' --focus)")" "$(calls)"
+  "$(q herdr pane list)" \
+  "$(q herdr tab create --workspace w7 --cwd "$(wt feat-42-payment-webhooks)" --label 'feat/#42-payment-webhooks' --focus)")" "$(calls)"
+FZF_PICK=fix-57 run switch.sh ""
+check "switch: open_mode=tab, a tab already only on it (w7:t2) → tab focus, no duplicate" "$(lines \
+  "$(q gwm list --format=json)" \
+  "$(q herdr worktree list --cwd "$caller")" \
+  "$(q herdr pane list)" \
+  "$(q herdr tab focus w7:t2)")" "$(calls)"
+# The only tab of its workspace (w8, opened in fix-57/src) is still one to focus:
+# the never-the-last-tab rule is for closing, not for focusing.
+jq --arg c "$(wt fix-57-rate-limit-headers)/src" '.result.panes |= (map(select(.tab_id != "w7:t2"))
+  + [{pane_id: "w8:p1", terminal_id: "t-12", workspace_id: "w8", tab_id: "w8:t1", focused: false, cwd: $c, agent_status: "unknown"}])' \
+  "$S/panes.json" >"$S/panes.w8"; cp "$S/panes.json" "$S/panes.orig"; cp "$S/panes.w8" "$S/panes.json"
+FZF_PICK=fix-57 run switch.sh ""
+check "switch: open_mode=tab focuses a workspace's ONLY tab on it (w8:t1)" "$(q herdr tab focus w8:t1)" "$(tail -n1 "$S/log")"
+cp "$S/panes.orig" "$S/panes.json"
 rm -f "$S/config/config.toml"
 
 # --- remove ------------------------------------------------------------------
 FZF_PICK=fix-57 run remove.sh "n"
-check "remove: N → nothing removed, nothing closed" "$(q gwm list --format=json)" "$(calls)"
+check "remove: N → preview + read-only herdr lookups, nothing removed or closed" "$(lines \
+  "$(q gwm list --format=json)" \
+  "$(q gwm remove fix-57-rate-limit-headers --dry-run)" \
+  "$(q herdr worktree list --cwd "$caller")" \
+  "$(q herdr pane list)")" "$(calls)"
+check "remove: the preview shows gwm's resolution before the question" \
+  "branch: fix/#57-rate-limit-headers" "$(grep -o 'branch: fix/#57-rate-limit-headers' "$S/out")"
+
+GWM_FAIL='remove fix-57-rate-limit-headers --dry-run' FZF_PICK=fix-57 run remove.sh "y"
+check "remove: a refused dry-run stops before the question" \
+  "$(q gwm remove fix-57-rate-limit-headers --dry-run)" "$(tail -n1 "$S/log")"
+check "remove: a refused dry-run asks nothing" "" "$(grep -o 'keep the branch' "$S/out")"
 
 FZF_PICK=acme-api run remove.sh "y"
 check "remove: the main checkout is never offered" "$(q gwm list --format=json)" "$(calls)"
 
+# docs-71: its own workspace (w9) + one tab elsewhere only on it (w1:t3). Kept:
+# a mixed tab (w1:t4), a docs-71-…-old prefix decoy (w1:t5), a no-cwd pane (w1:t6).
 FZF_PICK=docs-71 run remove.sh "y"
-check "remove: y → map the workspace first, gwm remove, close ITS workspace" "$(lines \
+check "remove: y → map reflections first, gwm remove (branch kept), close them" "$(lines \
   "$(q gwm list --format=json)" \
+  "$(q gwm remove docs-71-openapi-examples --dry-run)" \
   "$(q herdr worktree list --cwd "$caller")" \
+  "$(q herdr pane list)" \
+  "$(q herdr pane list)" \
   "$(q gwm remove docs-71-openapi-examples)" \
+  "$(q herdr tab close w1:t3)" \
   "$(q herdr workspace close w9)")" "$(calls)"
+check "remove: the question names what herdr will close" \
+  "herdr will close: workspace w9, tab(s) w1:t3" "$(grep -o 'herdr will close: .*' "$S/out")"
+check "remove: … and the agents that will be stopped" \
+  "agent(s) running there will be stopped: claude, codex" "$(grep -o 'agent(s) running there will be stopped: [a-z, ]*' "$S/out")"
+
+# herdr kills this popup with the tab it was opened from: when that tab is one
+# of the reflections, it goes LAST, after the removed worktree's workspace.
+CTX_WS=w1 CTX_TAB=w1:t3 FZF_PICK=docs-71 run remove.sh "y"
+check "remove: the caller's own tab is closed last" "$(lines \
+  "$(q herdr workspace close w9)" \
+  "$(q herdr tab close w1:t3)")" "$(tail -n2 "$S/log")"
+
+# Another workspace (w8) whose ONLY tab sits in docs-71: closing that tab would
+# close w8 itself, so it is never a candidate.
+jq --arg c "$(wt docs-71-openapi-examples)" '.result.panes += [{pane_id: "w8:p1", terminal_id: "t-12",
+  workspace_id: "w8", tab_id: "w8:t1", focused: false, cwd: $c, agent_status: "working", agent: "codex"}]' \
+  "$S/panes.json" >"$S/panes.w8b"; cp "$S/panes.json" "$S/panes.orig"; cp "$S/panes.w8b" "$S/panes.json"
+FZF_PICK=docs-71 run remove.sh "y"
+check "remove: a workspace's last tab is never closed (w8:t1 kept, w8 lives)" "" "$(grep -F 'w8' "$S/log")"
+cp "$S/panes.orig" "$S/panes.json"
+
+# Re-read after the answer: w1:t3 was announced, but by now its workspace has no
+# other tab left (the "outside" ones closed meanwhile) → closing it would close
+# w1, so it is left open and reported.
+jq '.result.panes |= map(select(.workspace_id != "w1" or .tab_id == "w1:t3"))' "$S/panes.json" >"$S/panes.next"
+FZF_PICK=docs-71 run remove.sh "y"
+check "remove: an announced tab no longer safe at answer time is not closed" "" "$(grep -F 'tab close w1:t3' "$S/log")"
+check "remove: … and is reported" "1 reflection(s) left open" "$(grep -o '1 reflection(s) left open' "$S/out")"
+rm -f "$S/panes.next"
+
+# The deferred close (the caller's own tab) can be refused too: still reported.
+HERDR_FAIL='tab close w1:t3' CTX_WS=w1 CTX_TAB=w1:t3 FZF_PICK=docs-71 run remove.sh "y"
+check "remove: a refused close of the caller's own tab is reported" \
+  "1 reflection(s) left open" "$(grep -o '1 reflection(s) left open' "$S/out")"
+
+HERDR_FAIL='tab close w1:t3' FZF_PICK=docs-71 run remove.sh "y"
+check "remove: a tab herdr refuses to close is reported, the workspace still closed" \
+  "1 reflection(s) left open" "$(grep -o '1 reflection(s) left open' "$S/out")"
+check "remove: … and the workspace close still ran" "$(q herdr workspace close w9)" "$(tail -n1 "$S/log")"
+
+FZF_PICK=docs-71 run remove.sh "D"
+check "remove: D → gwm remove --delete-branch" \
+  "$(q gwm remove docs-71-openapi-examples --delete-branch)" "$(sed -n 6p "$S/log")"
+check "remove: the prompt says D deletes even unmerged work" "even unmerged" "$(grep -o 'even unmerged' "$S/out")"
+FZF_PICK=docs-71 run remove.sh "d"
+check "remove: lowercase d is not D → cancelled, nothing removed or closed" "" \
+  "$(grep -E '^(gwm remove docs-71-openapi-examples$|herdr (tab|workspace) close)' "$S/log")"
 
 # --- create ------------------------------------------------------------------
 adopt57=$(q herdr worktree open --workspace w1 --path "$(wt fix-57-rate-limit-headers)" --label 'fix/#57-rate-limit-headers' --focus)
@@ -237,13 +337,32 @@ check "review: gh pr list picker → gwm review 9, adopt PR 9's worktree" "$(lin
   "$(q herdr worktree open --workspace w1 --path "$(wt review-pr-9-alice-fix)" --label review/pr-9-alice-fix --focus)")" "$(calls)"
 check "review: picker path exits 0" "0" "$rc"
 
+FZF_PICK=feat-42 run remove.sh "n"
+check "remove: a dirty worktree is flagged before the question" "uncommitted changes" "$(grep -o 'uncommitted changes' "$S/out")"
+FZF_PICK=docs-71 run remove.sh "n"
+check "remove: a clean one is not" "" "$(grep -o 'uncommitted changes' "$S/out")"
+
+# A stale HERDR_TAB_ID leaked from the server env must not win over the context.
+HERDR_TAB_ID=w9:t1 CTX_WS=w1 CTX_TAB=w1:t3 FZF_PICK=docs-71 run remove.sh "y"
+check "remove: the caller's tab comes from the context, not a stale env" "$(q herdr tab close w1:t3)" "$(tail -n1 "$S/log")"
+
+# gwm exits non-zero AFTER deleting the worktree (failing post_remove hook):
+# the reflections now point at nothing and are closed anyway.
+GWM_REMOVE_GONE=1 GWM_FAIL='remove docs-71-openapi-examples' FZF_PICK=docs-71 run remove.sh "y"
+check "remove: post_remove failure with the worktree gone → reflections still closed" "$(lines \
+  "$(q herdr tab close w1:t3)" \
+  "$(q herdr workspace close w9)")" "$(tail -n2 "$S/log")"
+check "remove: … and the error is reported" "gwm reported an error after removing it" \
+  "$(grep -o 'gwm reported an error after removing it' "$S/out")"
+mkdir -p "$(wt docs-71-openapi-examples)"
+
 # --- gwm failures stop the script before herdr is touched ---------------------
-GWM_FAIL=remove FZF_PICK=docs-71 run remove.sh "y"
-check "remove: gwm remove fails → the workspace is NOT closed" \
+GWM_FAIL='remove docs-71-openapi-examples' FZF_PICK=docs-71 run remove.sh "y"
+check "remove: gwm remove fails → no workspace or tab closed" \
   "$(q gwm remove docs-71-openapi-examples)" "$(tail -n1 "$S/log")"
-GWM_FAIL=create FZF_PICK=fix run create.sh $'57\nrate-limit-headers'
+GWM_FAIL='create fix 57 rate-limit-headers' FZF_PICK=fix run create.sh $'57\nrate-limit-headers'
 check "create: gwm create fails → nothing adopted" "$(q gwm create fix 57 rate-limit-headers)" "$(tail -n1 "$S/log")"
-GWM_FAIL=review GWM_REVIEW_URL='https://github.com/o/r/pull/7' run review.sh ""
+GWM_FAIL='review 7' GWM_REVIEW_URL='https://github.com/o/r/pull/7' run review.sh ""
 check "review: gwm review fails → nothing adopted" "$(q gwm review 7)" "$(calls)"
 GWM_FAIL=clean run clean.sh "y"
 check "clean: report fails → no --yes" "$(q gwm clean)" "$(calls)"
