@@ -11,10 +11,12 @@ platforms = ["macos", "linux"]
 # scripts would run in the plugin dir, not the repo you're in.
 # NB: gwm is the source of truth — see PLAN.md §0. herdr only reflects.
 #
-# Placement lives in [[panes]], NOT here: `pane open --placement` OVERRIDES the
-# manifest, and the CLI has no --width/--height — so a popup's size can only be
-# declared on the entrypoint. Pass --placement from an action and you silently
-# lose both. Pick-and-go pickers are popups (0.7.4+); panes whose OUTPUT is the
+# Placement lives in [[panes]]: `pane open --placement` OVERRIDES the entrypoint's,
+# while an omitted --width/--height falls back to the manifest's (herdr ≥ 0.7.4;
+# the parser takes both flags even though `--help` doesn't list them, and rejects
+# them for a non-popup placement). So the popup actions pass no --placement and
+# keep the size declared once, on the entrypoint. Pick-and-go pickers are popups
+# (0.7.4+); panes whose OUTPUT is the
 # point (exec, clean) or that run long git/network work (create, review) stay
 # split — a session-modal popup that blocks for a 30s clone reads as frozen.
 

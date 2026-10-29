@@ -17,8 +17,11 @@ Preuve que c'est faisable sans conflit — la CLI core herdr expose une commande
 d'**adoption** d'un checkout existant (vérifié dans `src/cli/worktree.rs` du core) :
 
 ```
-herdr worktree open [--workspace ID | --cwd PATH] (--path PATH | --branch NAME) [--label TEXT] [--focus] [--json]
+herdr worktree open [--workspace ID | --cwd PATH] (--path PATH | --branch NAME) [--label TEXT] [--focus] [--no-focus] [--trust-repository]
 ```
+
+(sortie toujours JSON ; `--json` est un no-op de compat, masqué depuis 0.8.0.
+`--trust-repository` (0.9.0) ne sert que pour un repo appartenant à un autre user.)
 
 Avec `--path`, herdr **adopte un worktree déjà créé sur le disque** — il ne crée
 rien. C'est exactement le pattern des deux plugins de référence :
@@ -52,6 +55,7 @@ rappelle herdr via `$HERDR_BIN_PATH`. herdr ≥ 0.7.4.
 |---|---|---|
 | top-level | métadonnées | `id`, `name`, `version`, `min_herdr_version` (requis), `description`, `platforms` |
 | `[[build]]` | commandes d'install (github seulement, pas `link`) | `command` (argv), `platforms` |
+| `[[startup]]` | one-shot au démarrage du serveur (0.7.5+, non utilisé ici) | `command`, `platforms` |
 | `[[actions]]` | entrées invocables | `id`, `title`, `contexts`, `command`, `platforms` |
 | `[[events]]` | hooks lifecycle | `on` (nom d'event), `command`, `platforms` |
 | `[[panes]]` | panneaux UI | `id`, `title`, `placement`, `width`/`height` (popup only), `command`, `platforms` |
@@ -86,21 +90,38 @@ de lifecycle, absent des APIs pane/layout/agent — la pane tuilée sous-jacente
 reste lisible via `HERDR_PLUGIN_CONTEXT_JSON`. Ouvrir un popup pendant Settings
 ou copy-mode renvoie `ui_busy`.
 
-⚠️ La CLI n'expose pas `--width`/`--height` : la taille ne vit que dans le
-manifest, et comme `--placement` override le manifest, une action qui passe
-`--placement` perd la taille avec. → déclarer le placement sur l'entrypoint,
-pas dans l'action.
+⚠️ `plugin pane open --help` ne liste ni `popup` ni `--width`/`--height`, mais le
+parser les accepte depuis 0.7.4 (`src/cli/plugin.rs`). Côté serveur,
+`--placement` override celui du manifest, et une taille omise retombe sur celle
+du manifest (`params.width.or(pane.width)`). `--width`/`--height` avec un
+placement non-popup → `invalid_params`. → on déclare placement + taille une
+seule fois sur l'entrypoint, et les actions popup ne passent pas `--placement`.
 
-### 1.4 Events éligibles pour `[[events]] on = "..."` (extraits du core)
+### 1.4 Events éligibles pour `[[events]] on = "..."` (`PLUGIN_HOOK_EVENT_KINDS`, 0.9.5)
 
 ```
-worktree.created   worktree.opened   worktree.removed
-workspace.created  workspace.closed  workspace.focused  workspace.updated
-tab.created        tab.closed        tab.focused
-pane.created       pane.closed       pane.exited        pane.focused   pane.spawned
-session.created    session.idle      session.status     session.updated
-layout.updated     terminal.closed
+worktree.created   worktree.opened    worktree.removed
+workspace.created  workspace.updated  workspace.closed  workspace.renamed
+workspace.moved    workspace.reordered workspace.focused
+tab.created        tab.closed         tab.renamed       tab.moved   tab.focused
+pane.created       pane.closed        pane.focused      pane.moved  pane.exited
+pane.agent_detected pane.agent_status_changed
 ```
+
+Les events à fort volume (`pane.output_changed`, `pane.updated`,
+`layout.updated`, `workspace.metadata_updated`) sont exclus des hooks. Un nom
+inconnu donne un warning `unknown event` au link.
+
+`HERDR_PLUGIN_EVENT_JSON` = l'**enveloppe** sérialisée, même forme de 0.7.4 à
+0.9.5 — le chemin est dans `.data.worktree.path` :
+
+```json
+{"event":"worktree.created","data":{"type":"worktree_created",
+ "workspace":{…},"worktree":{"path":"…","branch":"…","open_workspace_id":"…",…}}}
+```
+
+Les hooks tournent avec le **dossier du plugin** comme cwd : tout outil qui
+découvre son repo depuis le cwd (gwm) doit être lancé depuis le worktree visé.
 
 ### 1.5 Variables d'env injectées dans les commandes runtime
 
@@ -134,10 +155,10 @@ Champs absents = non fournis pour cette invocation. En bash : `jq -r '.workspace
 ### 1.8 Commandes herdr qu'on va consommer (via `$HERDR_BIN_PATH`)
 
 ```
-herdr worktree open --path PATH --label TEXT --focus [--json]   # ADOPTER (jamais --branch)
-herdr worktree list [--cwd PATH] [--json]                        # mapping path -> open_workspace_id
+herdr worktree open --path PATH --label TEXT --focus            # ADOPTER (jamais --branch)
+herdr worktree list [--cwd PATH]                                 # mapping path -> open_workspace_id (JSON)
 herdr workspace create --cwd PATH --label TEXT --focus           # alt. au worktree open (mode workspace top-level)
-herdr workspace close <workspace_id>                             # fermer le reflet après gwm remove
+herdr workspace close <workspace_id>                             # fermer le reflet après gwm remove (worktree lié : pas de --group, réservé au primaire depuis 0.9.0)
 herdr tab create --workspace ID --cwd PATH --label TEXT --focus  # mode léger (open_mode=tab)
 herdr pane run <pane_id> <command>                               # envoyer une cmd dans un shell interactif
 herdr pane list / pane close                                     # nettoyage panes orphelins
@@ -165,6 +186,10 @@ trust-by-disclosure, **pas de sandbox**. Ce qui nous concerne :
 2. **le `link_handler` exécute sur clic d'URL** → ancrer le regex strictement
    (`^...$`), extraire le numéro, passer **le numéro** à `gwm review`, jamais
    l'URL brute. Sinon une URL forgée dans un log peut déclencher une action.
+   Déclenchement : Ctrl-clic (sur toutes les plateformes), seulement avec
+   `ui.mouse_capture` actif ; depuis 0.9.4 les handlers passent avant
+   l'ouverture navigateur. Depuis 0.9.0 ils reçoivent aussi les clics OSC 8
+   `file://` qui matchent — notre regex `https://github.com/…` les exclut.
 
 ---
 
@@ -231,7 +256,7 @@ plateformes macos/linux.
 - [ ] `bin/switch.sh` : `gwm list --format=json` → fzf (afficher name + badges
       issue/PR/CI) → si déjà ouvert `workspace focus`, sinon `adopt_worktree`.
 - [ ] `bin/remove.sh` : fzf sur worktrees removable → `gwm remove` → mapper le
-      path vers `open_workspace_id` (`herdr worktree list --cwd $PWD --json`) →
+      path vers `open_workspace_id` (`herdr worktree list --cwd $PWD`) →
       `herdr workspace close`.
 - [ ] Keybindings recommandés dans le README (override `prefix+shift+g` natif).
 - [ ] Tests bash des helpers (parsing json, garde-fou, open_mode).
@@ -319,9 +344,11 @@ Publication : topic github `herdr-plugin` → apparaît au marketplace ;
 
 ## 8. Références
 
-- Core herdr : `ogulcancelik/herdr` — CLI dans `src/cli/`, worktree open dans
-  `src/cli/worktree.rs`, schema plugin dans `src/api/schema/plugins.rs`, doc dans
-  `website/src/content/docs/{plugins,cli-reference,socket-api}.mdx`.
+- Core herdr : `herdrdev/herdr` (ex-`ogulcancelik/herdr`, migré en 0.8.0) — CLI
+  dans `src/cli/`, worktree open dans `src/cli/worktree.rs`, schema plugin dans
+  `src/api/schema/plugins.rs`, events dans `src/api/schema/events.rs`, doc dans
+  `docs/next/website/src/content/docs/{plugins,cli-reference,socket-api}.mdx`.
+  Index LLM versionné : https://herdr.dev/llms.txt.
 - Plugin de référence #1 (cas exact) : `devashish2203/herdr-worktrunk` (bash).
 - Plugin de référence #2 : `NathanFlurry/herdr-plugin-jj-workspace` (rust).
 - Exemples officiels : `ogulcancelik/herdr-plugin-examples`.
