@@ -166,7 +166,8 @@ Champs absents = non fournis pour cette invocation. En bash : `jq -r '.workspace
 herdr worktree open [--workspace ROOT | --cwd MAIN] --path PATH --label TEXT --focus  # ADOPTER (jamais --branch) ;
                                                                   #   --cwd MAIN : aucun workspace sur ce repo → herdr le crée
 herdr worktree list --cwd PATH                                    # root ws + checkout principal + mapping path -> open_workspace_id (JSON) ;
-                                                                  #   PATH = le worktree CIBLE (accepte un worktree lié)
+                                                                  #   PATH = le worktree CIBLE (accepte un worktree lié) ;
+                                                                  #   remove : le repo ($PWD), le dossier a pu disparaître
 herdr workspace focus <workspace_id>                              # switch : déjà reflété → focus
 herdr workspace close <workspace_id>                              # fermer le reflet après gwm remove (worktree lié : pas de --group, réservé au primaire depuis 0.9.0)
 herdr tab create [--workspace ID] --cwd PATH --label TEXT --focus # mode léger (open_mode=tab)
