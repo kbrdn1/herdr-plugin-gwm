@@ -43,4 +43,9 @@ wsid=$("$herdr" worktree list --cwd "$PWD" 2>/dev/null | herdr_ws_id_for_path "$
 if [[ -n $wsid ]]; then
   exec "$herdr" workspace focus "$wsid"
 fi
+# open_mode=tab: a tab already showing only this worktree is focused, not doubled.
+if [[ $(open_mode) == tab ]]; then
+  tab=$("$herdr" pane list 2>/dev/null | herdr_tabs_for_path "$path" | head -n1)
+  [[ -n $tab ]] && exec "$herdr" tab focus "$tab"
+fi
 adopt_worktree "$path" "${branch:-$name}"
