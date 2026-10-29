@@ -60,7 +60,7 @@ wt_fzf() {
 }
 
 # Given a worktree path, print herdr's open_workspace_id for it (empty if not
-# open). Reads `herdr worktree list ... --json` on stdin. Pure/testable.
+# open). Reads `herdr worktree list` output (always JSON) on stdin. Pure/testable.
 # Normalizes the trailing slash: gwm paths carry one (".../foo/"), herdr's don't.
 herdr_ws_id_for_path() {
   local path=${1%/}
@@ -96,7 +96,7 @@ adopt_worktree() {
   # Adopt under the repo ROOT workspace. Opening from inside a linked-worktree
   # workspace is rejected (linked_worktree_source); herdr resolves the root from
   # any checkout cwd. Fall back to a plain open if it can't be resolved.
-  root_ws=$("$herdr" worktree list --cwd "$PWD" --json 2>/dev/null \
+  root_ws=$("$herdr" worktree list --cwd "$PWD" 2>/dev/null \
     | jq -r '.result.source.source_workspace_id // empty')
   if [[ -n $root_ws ]]; then
     exec "$herdr" worktree open --workspace "$root_ws" --path "$path" --label "$label" --focus

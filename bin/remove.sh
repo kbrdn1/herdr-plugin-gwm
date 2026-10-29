@@ -38,7 +38,7 @@ printf 'Remove worktree "%s"? branch kept. [y/N] ' "$name"; read -r ans
 [[ $ans =~ ^[Yy]$ ]] || { printf 'cancelled\n'; exit 0; }
 
 # Map herdr's workspace BEFORE removing — the path is gone afterwards.
-wsid=$("$herdr" worktree list --cwd "$PWD" --json 2>/dev/null | herdr_ws_id_for_path "$path")
+wsid=$("$herdr" worktree list --cwd "$PWD" 2>/dev/null | herdr_ws_id_for_path "$path")
 
 gwm remove "$name" || die "gwm remove failed (see above)"
 printf '\033[32m✓ removed %s\033[0m\n' "$name"
