@@ -1,3 +1,11 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/_assets/promo.png">
+    <source media="(prefers-color-scheme: light)" srcset="docs/_assets/promo-light.png">
+    <img alt="herdr-plugin-gwm: gwm worktrees inside herdr, gwm stays the source of truth and herdr adopts" src="docs/_assets/promo.png" width="100%">
+  </picture>
+</p>
+
 # herdr-plugin-gwm — gwm worktrees in herdr
 
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)

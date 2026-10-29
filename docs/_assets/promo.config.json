@@ -1,0 +1,50 @@
+{
+  "eyebrow": "herdr plugin",
+  "version": "v0.2.0",
+  "wordmark": "herdr-plugin-gwm",
+  "wordmarkSize": 62,
+  "tagline": "gwm worktrees, inside herdr.<br>gwm stays the source of truth; herdr adopts.",
+  "motif": "<div style=\"width:556px;background:#141417;border:1px solid #33333a;border-radius:14px;overflow:hidden;box-shadow:0 24px 48px -24px rgba(0,0,0,0.6);font-family:'Krypton',monospace;font-size:17px;\"><div style='display:flex;align-items:center;justify-content:space-between;height:42px;padding:0 18px;border-bottom:1px solid #2a2a30;color:#8a8a93;font-size:15px;'><span>gwm.switch</span><span style='color:#ececf0;'>switch to <span style='color:#d4825d;'>❯</span></span></div><div style='padding:10px 8px 12px;'><div style='display:flex;align-items:center;height:34px;padding:0 14px;border-radius:6px;'><span style='color:#4a4a52;margin-right:12px;'>▌</span><span style='color:#c8c8cf;'>gwm-demo</span><span style='color:#86e89a;margin-left:14px;'>↑13</span><span style='color:#ff7a7a;margin-left:14px;'>↓758</span></div><div style='display:flex;align-items:center;height:34px;padding:0 14px;background:rgba(212,130,93,0.10);border-radius:6px;'><span style='color:#d4825d;margin-right:12px;'>▌</span><span style='color:#ececf0;'>feat-35-embedded-lazygit</span><span style='color:#d4825d;margin-left:14px;'>#35</span><span style='color:#86e89a;margin-left:14px;'>↑3</span></div><div style='display:flex;align-items:center;height:34px;padding:0 14px;border-radius:6px;'><span style='color:#4a4a52;margin-right:12px;'>▌</span><span style='color:#c8c8cf;'>fix-2-beta</span><span style='color:#d4825d;margin-left:14px;'>#2</span><span style='color:#ffd36b;margin-left:14px;'>±</span></div><div style='display:flex;align-items:center;height:34px;padding:0 14px;border-radius:6px;'><span style='color:#4a4a52;margin-right:12px;'>▌</span><span style='color:#c8c8cf;'>docs-199-i18n</span><span style='color:#d4825d;margin-left:14px;'>#199</span><span style='color:#c79bff;margin-left:14px;'>PR#205</span><span style='color:#ff7a7a;margin-left:14px;'>↓5</span></div><div style='display:flex;align-items:center;height:34px;padding:0 14px;border-radius:6px;'><span style='color:#4a4a52;margin-right:12px;'>▌</span><span style='color:#c8c8cf;'>feat-1-alpha</span><span style='color:#d4825d;margin-left:14px;'>#1</span><span style='color:#ffd36b;margin-left:14px;'>±</span></div></div></div>",
+  "thumbSize": [
+    600,
+    284
+  ],
+  "facts": [
+    {
+      "icon": "tag",
+      "label": "Version",
+      "value": "v0.2.0",
+      "ok": true
+    },
+    {
+      "icon": "sparkles",
+      "label": "Type",
+      "value": "herdr plugin"
+    },
+    {
+      "icon": "status",
+      "label": "Requires",
+      "value": "herdr ≥ 0.7.4"
+    },
+    {
+      "icon": "scale",
+      "label": "License",
+      "value": "MIT"
+    },
+    {
+      "icon": "user",
+      "label": "Author",
+      "value": "kbrdn1",
+      "person": true
+    }
+  ],
+  "chips": [
+    "7 actions",
+    "fzf pickers with badges",
+    "Ctrl-click a PR URL",
+    "Adopt-only guardrail",
+    "24 tests"
+  ],
+  "install": "herdr plugin install kbrdn1/herdr-plugin-gwm",
+  "footer": "github.com/kbrdn1/herdr-plugin-gwm · Bash · MIT"
+}
