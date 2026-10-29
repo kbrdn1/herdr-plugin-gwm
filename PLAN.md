@@ -197,28 +197,32 @@ trust-by-disclosure, **pas de sandbox**. Ce qui nous concerne :
 
 ---
 
-## 2. Surface gwm à utiliser (source de vérité — vérifié sur `gwm --help`)
+## 2. Surface gwm à utiliser (source de vérité — vérifié sur `gwm --help`, gwm 1.11.0)
 
 ```
-gwm create <BRANCH_TYPE> <ISSUE> <DESC> [--repo NAME] [--workspace DIR]   # crée wt + branche + bootstrap. PAS de --format json.
-gwm path <PATTERN> --format=json          # -> { name, path, branch }   ← récupérer le path après create
-gwm list --format=json                    # table worktrees + badges (schema docs/schema/)
-gwm status                                # issue/PR link + statut GitHub live (CI)
-gwm review <PR#>                           # matérialise une PR en worktree isolé
-gwm remove <PATTERN>                       # supprime un worktree
-gwm bootstrap                              # re-run bootstrap (.env, hooks, preset)
-gwm exec -- <cmd>                          # fan-out séquentiel sur tous les worktrees
-gwm clean [--yes]                          # reclaim build artifacts
-gwm statusline                             # résumé une ligne
-gwm daemon                                 # JSON-RPC 2.0 sur socket unix (subscribe -> live)
-gwm --workspace <DIR> ...                  # mode multi-repo (colonne REPO)
+gwm create <BRANCH_TYPE> <ISSUE> <DESC>   # crée wt + branche + bootstrap. PAS de --format json.
+gwm create --issue <N> [--type T]         # (1.10+) triple dérivé d'une issue existante : desc = titre,
+                                          #   type = labels (ou --type) ; déjà un worktree → affiché, exit 0
+gwm types                                 # types de branche (1re colonne → picker)
+gwm path <PATTERN> --format=json          # -> { name, path, branch }
+gwm list --format=json                    # docs/schema/worktree-list.schema.json ; champs lus :
+                                          #   name, path, branch, issue, pr, is_main, status.{is_dirty,ahead,behind}
+gwm review <PR#>                          # PR → worktree review/pr-<N>-<author>-<slug>, sans bootstrap par défaut
+gwm remove <PATTERN>...                   # ne demande PAS de confirmation (le plugin la fait), branche gardée
+gwm bootstrap [TARGET]                    # re-run bootstrap ; lit .gwm.toml depuis le repo du CWD
+gwm exec -- <cmd>                         # fan-out sur les worktrees NON-main (rollup ✓/✗)
+gwm clean [--yes]                         # rapport (puis suppression des dossiers git-ignorés), non-main
+gwm herdr <PATTERN> [-p|--direction D]    # (1.10+) ouvre en onglet / pane herdr — cf. README « plugin or gwm herdr? »
+gwm status / statusline / daemon          # non utilisés (le dashboard est le TUI gwm)
+gwm --workspace <DIR> ...                 # mode multi-repo (colonne REPO) — non câblé
 ```
 
-Flux create canonique :
+Flux create réel (`bin/create.sh`) :
 ```bash
-gwm create "$type" "$issue" "$desc"
-read -r path branch < <(gwm path "$desc" --format=json | jq -r '"\(.path) \(.branch)"')
-"$HERDR_BIN_PATH" worktree open --path "$path" --label "$branch" --focus
+gwm create "$type" "$issue" "$desc"            # ou, desc vide : gwm create --issue "$issue" --type "$type"
+row=$(gwm list --format=json | jq -c --arg i "$issue" 'map(select((.issue|tostring) == $i)) | last // empty')
+# repli si aucune ligne ne porte l'issue : gwm path "$desc" --format=json
+adopt_worktree "$path" "$branch"               # → herdr worktree open --path … (jamais --branch)
 ```
 
 ---
@@ -239,52 +243,58 @@ read -r path branch < <(gwm path "$desc" --format=json | jq -r '"\(.path) \(.bra
   - `tab` → `herdr tab create --cwd` + `gwm` dans le shell : plus léger.
 
 ### Prérequis runtime
-herdr ≥ 0.7.4 (panes popup) · `gwm` sur PATH · `jq` · `fzf` · `bash` ·
-plateformes macos/linux.
+herdr ≥ 0.7.4 (panes popup) · `gwm` sur PATH (≥ 1.10 pour `create --issue`,
+qui a aussi besoin de la forge du repo) · `jq` · `fzf` · `bash` · plateformes
+macos/linux.
 
 ---
 
 ## 4. Plan d'implémentation phasé (MVP d'abord)
 
-> **Statut (v0.2.0)** : phases 1-4 **implémentées** (create/switch/remove/review/exec/clean/dashboard + link_handler PR + event `worktree.created`). Seul reliquat : le mode multi-repo `gwm --workspace` n'est pas câblé dans les actions.
+> **Statut (`dev`, manifest 0.2.0)** : phases 1-4 **implémentées** (create/switch/remove/review/exec/clean/dashboard + link_handler PR + event `worktree.created`, opérant depuis la PR #7). Reliquats : le mode multi-repo `gwm --workspace` n'est pas câblé, et le sens gwm → herdr sans plugin (phase 3) n'est pas documenté.
 
-### Phase 1 — MVP : create / switch / remove  ← commencer ici
-- [ ] `herdr-plugin.toml` : métadonnées + 3 actions (`create`, `switch`,
-      `remove`, contexts `["workspace","global"]`) + 2 panes picker/remover.
-- [ ] `lib/common.sh` : helpers partagés — `herdr_bin`, `ctx_cwd` (jq sur
-      `HERDR_PLUGIN_CONTEXT_JSON`), `gwm_json`, `open_mode`, et le **garde-fou**
-      (fonction unique `adopt_worktree <path> <label>` qui n'appelle que
-      `worktree open --path`).
-- [ ] `bin/create.sh` : prompt type/issue/desc (ou fzf sur `gwm types`) →
-      `gwm create` → `gwm path --format=json` → `adopt_worktree`.
-- [ ] `bin/switch.sh` : `gwm list --format=json` → fzf (afficher name + badges
-      issue/PR/CI) → si déjà ouvert `workspace focus`, sinon `adopt_worktree`.
-- [ ] `bin/remove.sh` : fzf sur worktrees removable → `gwm remove` → mapper le
-      path vers `open_workspace_id` (`herdr worktree list --cwd $PWD`) →
-      `herdr workspace close`.
-- [ ] Keybindings recommandés dans le README (override `prefix+shift+g` natif).
-- [ ] Tests bash des helpers (parsing json, garde-fou, open_mode).
+### Phase 1 — MVP : create / switch / remove
+- [x] `herdr-plugin.toml` : métadonnées + actions `create`/`switch`/`remove`
+      (contexts `["workspace","global"]`, `remove` en `["workspace"]`) + panes
+      `creator` (split), `picker`/`remover` (popup 70 %×60 %).
+- [x] `lib/common.sh` : `herdr_bin`, `ctx_cwd`, `open_mode`, `fzf_theme`,
+      `wt_fzf`, `herdr_ws_id_for_path`, `event_worktree_path`,
+      `pr_number_from_url`, et le **garde-fou** `adopt_worktree <path> <label>`
+      (seul chemin vers herdr : `worktree open --path` ou `tab create --cwd`).
+- [x] `bin/create.sh` : fzf sur `gwm types` → issue → desc (vide = `gwm create
+      --issue`, gwm ≥ 1.10) → `gwm create` → résolution par l'issue dans
+      `gwm list` (repli `gwm path`) → `adopt_worktree`.
+- [x] `bin/switch.sh` : `gwm list --format=json` → fzf (badges issue/PR/±/↑/↓,
+      pas de CI : il faudrait un appel réseau par worktree) → `workspace focus`
+      si déjà ouvert, sinon `adopt_worktree`.
+- [x] `bin/remove.sh` : fzf sur les worktrees non-main → **confirmation** (gwm
+      ne demande pas) → mapper le path vers `open_workspace_id` AVANT → `gwm
+      remove` (branche gardée) → `herdr workspace close`.
+- [x] Keybinding d'exemple dans le README (`prefix+ctrl+shift+g` → `gwm.switch`).
+- [x] Tests bash des helpers (cf. §6).
 
 ### Phase 2 — intégration GitHub / PR
-- [ ] `bin/review.sh` : prompt PR# (ou fzf `gh pr list`) → `gwm review <PR#>` →
-      `gwm path --format=json` → `adopt_worktree`.
-- [ ] `[[link_handlers]]` sur `^https://github\.com/[^/]+/[^/]+/pull/[0-9]+$` →
-      action `review`. Extraire le N depuis `HERDR_PLUGIN_CLICKED_URL`, passer N
-      (pas l'URL) à `gwm review`. Test du parsing + du garde-fou d'URL.
+- [x] `bin/review.sh` : fzf `gh pr list` (ou prompt PR#) → `gwm review <PR#>` →
+      résolution par le préfixe de branche `review/pr-<N>` (repli `gwm path`) →
+      `adopt_worktree`.
+- [x] `[[link_handlers]]` sur `^https://github\.com/[^/]+/[^/]+/pull/[0-9]+$` →
+      action `review`. L'action lit `clicked_url` du context JSON et le passe en
+      `--env GWM_REVIEW_URL` ; `review.sh` extrait N (`pr_number_from_url`) et ne
+      passe que N à gwm. Testé (URL valide + rejets).
 
 ### Phase 3 — bootstrap & sens inverse
-- [ ] `[[events]] on = "worktree.created"` → `gwm bootstrap` sur le path de
-      l'event (enrichit un worktree créé côté herdr natif). Optionnel — à ne
-      faire que si on veut supporter la création hors-gwm. Sinon documenter :
+- [x] `[[events]] on = "worktree.created"` → `gwm bootstrap` sur
+      `.data.worktree.path`, lancé **depuis** le worktree (le hook démarre dans
+      le dossier du plugin). Inopérant jusqu'à la PR #7 (mauvais champ + mauvais cwd).
 - [ ] **sens gwm → herdr sans plugin** : un hook post-create dans `.gwm.toml`
-      (`herdr worktree open --path <path>`) suffit. Le documenter dans le README,
-      ne pas le dupliquer dans le plugin.
+      (`herdr worktree open --path <path>`) suffirait. Pas documenté. Depuis
+      gwm 1.10, `gwm herdr` couvre le besoin onglet/pane sans plugin.
 
-### Phase 4 — vue live & ops (avancé, YAGNI tant que pas demandé)
-- [ ] pane `dashboard` (placement `split`/`overlay`) : lance le TUI gwm, ou une
-      vue custom alimentée par `gwm daemon` (subscribe) → badges PR/CI/diff en
-      live sans polling. C'est le différenciateur vs worktrunk/jj.
-- [ ] actions `exec` (`gwm exec -- <cmd>`) et `clean` (`gwm clean`).
+### Phase 4 — vue live & ops
+- [x] pane `dashboard` (placement `zoomed`) : lance le TUI gwm tel quel. Une vue
+      custom sur `gwm daemon` reste YAGNI tant que le TUI suffit.
+- [x] actions `exec` (`gwm exec -- bash -c <cmd>`) et `clean` (rapport →
+      confirmation → `gwm clean --yes`).
 - [ ] support `--workspace` (multi-repo) : détecter le mode et passer `--repo`.
 
 ---
@@ -293,20 +303,18 @@ plateformes macos/linux.
 
 ```
 herdr-plugin-gwm/
-  herdr-plugin.toml          # manifest
+  herdr-plugin.toml          # manifest (actions, panes, link handler, event)
   lib/
-    common.sh                # helpers + garde-fou adopt_worktree
+    common.sh                # helpers + garde-fou adopt_worktree (open_mode/fzf_theme lus ici)
   bin/
-    create.sh
-    switch.sh
-    remove.sh
-    review.sh                # phase 2
-  config.sh                  # lecture open_mode
+    create.sh  switch.sh  remove.sh  review.sh
+    exec.sh    clean.sh
+    on_worktree_created.sh   # hook de l'event worktree.created
   tests/
-    common_test.sh           # helpers purs (json, garde-fou, url parse)
-  README.md                  # install, keybindings, open_mode, prérequis
-  LICENSE                    # MIT
-  .gitignore
+    common_test.sh           # helpers purs + argv d'adopt_worktree contre un herdr stub
+  .github/workflows/ci.yml   # shellcheck + tests (PR, push dev/main)
+  .shellcheckrc              # source-path=SCRIPTDIR : suit le source de lib/common.sh
+  README.md  PLAN.md  LICENSE  .gitignore
 ```
 
 Pas de `[[build]]` (bash, rien à compiler) → `plugin link` marche direct, et
@@ -316,16 +324,24 @@ Pas de `[[build]]` (bash, rien à compiler) → `plugin link` marche direct, et
 
 ## 6. Tests (repo séparé, pas la CI gwm)
 
-Suivre le modèle worktrunk (`tests/*.sh`, assertions bash) : tester les
-**fonctions pures** sans instance herdr :
-- parsing de `HERDR_PLUGIN_CONTEXT_JSON` (cwd fallback),
-- extraction du numéro de PR depuis une URL (+ rejet d'URL forgée),
-- résolution `open_mode`,
-- le garde-fou : vérifier qu'aucun chemin de code n'émet `worktree create` /
-  `--branch` (grep-assert dans le test).
+`tests/common_test.sh` (assertions bash, sans instance herdr ni gwm) :
+- `ctx_cwd` (fallback cwd), `open_mode` / `fzf_theme`,
+- `wt_fzf` contre un `fzf` stub (héritage des opts, mode clean, survie à `set -u`),
+- `pr_number_from_url` (+ rejet d'URL forgée),
+- `herdr_ws_id_for_path` (slash final gwm vs herdr),
+- `event_worktree_path` sur une enveloppe herdr complète (forme plate rejetée),
+- `adopt_worktree` contre un `HERDR_BIN_PATH` stub qui journalise son argv,
+- le garde-fou : aucun chemin de code n'émet `worktree create` / `--branch`.
 
-Les scripts qui appellent herdr/gwm ne sont pas testables sans binaires → tester
-l'intention (argv construits) via un `HERDR_BIN_PATH` mock qui echo ses args.
+CI (`.github/workflows/ci.yml`) : `shellcheck bin/*.sh lib/*.sh` + la suite, sur
+chaque PR et sur push `dev`/`main`. Le shellcheck du runner (0.9.0 sur
+ubuntu-latest) peut remonter ce qu'un 0.11 local ne voit plus (SC2119).
+
+Les scripts `bin/*` se valident à la main avec un `HERDR_BIN_PATH` stub + un
+`fzf` stub contre le vrai gwm (fixture `~/gwm-demo` en lecture seule, repo
+scratch pour ce qui mute). Ce qui ne se vérifie qu'en live : popup (cwd/env),
+vrai Ctrl-clic sur une URL, déclenchement réel de l'event, rechargement du
+manifest d'un plugin lié.
 
 ---
 
