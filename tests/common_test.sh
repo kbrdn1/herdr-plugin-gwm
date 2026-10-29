@@ -48,23 +48,24 @@ check "wt_fzf drops FZF_DEFAULT_OPTS (clean)" "[]" \
   "$(FZF_DEFAULT_OPTS='--color=dark' PATH="$stub:$PATH" HERDR_PLUGIN_CONFIG_DIR=$tmp wt_fzf </dev/null)"
 rm -rf "$tmp" "$stub"
 
-# gwm_profiles: saved profiles out of a real `gwm config list` (trimmed to repo keys).
-check "profiles: exec → name<TAB>command, in gwm's order" "$(printf 'fmt\t["true"]\ntest\t["git", "status", "--short"]')" \
-  "$(gwm_profiles exec <tests/fixtures/gwm-config-list.txt)"
-check "profiles: clean → name<TAB>dirs" "$(printf 'deep\t["target", ".cache"]')" \
-  "$(gwm_profiles clean <tests/fixtures/gwm-config-list.txt)"
-check "profiles: none configured → nothing" "" "$(printf 'merge_method = "merge"\n' | gwm_profiles exec)"
-# Real gwm 1.11 output for hostile keys/values (captured from a scratch repo):
-# an empty key, a dash-leading key, a dotted key, and a multi-line command whose
-# continuation lines forge an `exec.profiles.test.command` line BEFORE the real one.
-check "profiles: empty / -dash / dotted keys and multi-line values are skipped; the real test kept" \
-  "$(printf 'fmt\t["true"]\ntest\t["git", "status", "--short"]')" \
-  "$(gwm_profiles exec <tests/fixtures/gwm-config-list-tricky.txt)"
-check "profiles: a value that isn't a one-line array is skipped" "" \
-  "$(printf 'exec.profiles.x.command = "not an array"\n' | gwm_profiles exec)"
-check "profiles: first occurrence of a name wins" "$(printf 'x\t["a"]')" \
-  "$(printf 'exec.profiles.x.command = ["a"]\nexec.profiles.x.command = ["b"]\n' | gwm_profiles exec)"
-check "profiles: unknown kind → nothing" "" "$(gwm_profiles nope <tests/fixtures/gwm-config-list.txt)"
+# gwm_profile_names: NAMES only, out of real `gwm config list --prefix <kind>.profiles`
+# captures (gwm 1.11). The exec one holds hostile keys: -dash, a dotted "a.b", a
+# container profile, and a spoofed `lint.command = [...] x` key.
+check "profile names: exec → known-field names, -dash and dotted skipped (lint = spoof, gwm refuses it)" \
+  "$(printf 'box\nfmt\nlint\ntest')" "$(gwm_profile_names exec <tests/fixtures/gwm-config-profiles-exec.txt)"
+check "profile names: never a command or an array in the output" "" \
+  "$(gwm_profile_names exec <tests/fixtures/gwm-config-profiles-exec.txt | grep -F '[')"
+check 'profile names: any multi-line string (""") → no picker at all' "" \
+  "$(gwm_profile_names exec <tests/fixtures/gwm-config-profiles-exec-multiline.txt)"
+check "profile names: ''' counts too" "" \
+  "$(printf '%s\n' "exec.profiles.a.command = ['''" "x'''] " | gwm_profile_names exec)"
+check "profile names: clean → dirs profiles" "$(printf 'deep\ndefault')" \
+  "$(gwm_profile_names clean <tests/fixtures/gwm-config-profiles-clean.txt)"
+check "profile names: first occurrence wins" "x" \
+  "$(printf 'exec.profiles.x.command = ["a"]\nexec.profiles.x.jobs = 2\n' | gwm_profile_names exec)"
+check "profile names: an unknown field doesn't make a name" "" \
+  "$(printf 'exec.profiles.x.weird = 1\n' | gwm_profile_names exec)"
+check "profile names: unknown kind → nothing" "" "$(gwm_profile_names nope <tests/fixtures/gwm-config-profiles-clean.txt)"
 
 # pr_number_from_url: valid
 check "pr url valid" "42" "$(pr_number_from_url 'https://github.com/o/r/pull/42')"

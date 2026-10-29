@@ -142,32 +142,25 @@ adopt_worktree() {
   exec "$herdr" worktree open --path "$path" --label "$label" --focus
 }
 
-# Saved profiles out of `gwm config list` on stdin, one "<name><TAB><what>" per
-# profile: exec → its command, clean → its dirs. That output is gwm's human text,
-# outside its JSON contract, so this reads it defensively and anything it doesn't
-# recognise yields no profile (the caller keeps its plain prompt):
-#   - a multi-line string ("""…""" / '''…''', spread over several physical lines)
-#     is skipped whole: its continuation lines are value text, never config keys
-#     (a crafted value could otherwise forge an `exec.profiles.x.command` line);
-#   - the value must be a one-line array `[…]`;
-#   - first occurrence of a name wins.
-# ponytail: names are [A-Za-z0-9_][A-Za-z0-9_-]* only; a dotted, empty or
-# dash-leading key is skipped (no profile, never a wrong one or a bad argv).
-# Pure/testable.   $1 = exec | clean
-gwm_profiles() {
-  local key
-  case ${1:-} in exec) key='command' ;; clean) key='dirs' ;; *) return 0 ;; esac
-  awk -v pfx="$1.profiles." -v sfx=".$key = " -v sq="'" -v dq='"' '
-    BEGIN { tq = dq dq dq; ts = sq sq sq }
-    ml != "" { if (index($0, ml)) ml = ""; next }
-    { t = $0; if (gsub(tq, "", t) % 2) ml = tq; t = $0; if (gsub(ts, "", t) % 2) ml = ts }
-    ml != "" { next }
-    index($0, pfx) == 1 {
-      rest = substr($0, length(pfx) + 1); i = index(rest, sfx); if (!i) next
-      name = substr(rest, 1, i - 1); val = substr(rest, i + length(sfx))
-      if (name !~ /^[A-Za-z0-9_][A-Za-z0-9_-]*$/ || val !~ /^\[.*\]$/ || (name in seen)) next
-      seen[name] = 1; printf "%s\t%s\n", name, val
-    }'
+# Saved profile NAMES for a picker, from `gwm config list --prefix <kind>.profiles`
+# on stdin (gwm filters by key before printing, so no other section leaks in).
+# Names only, never their command: picking X means "run profile X as .gwm.toml
+# defines it" — exactly gwm's own `--profile X` — so the picker makes no claim it
+# could have misread (a container runtime, a spoofed key). That output is gwm's
+# human text, outside its JSON contract, so: any multi-line string in it (""" /
+# ''') means no picker at all, and the caller keeps its plain prompt.
+# ponytail: names are [A-Za-z0-9_][A-Za-z0-9_-]* on a known field only (exec:
+# command|jobs|container.*, clean: dirs), first occurrence wins; one multi-line
+# value anywhere in the section disables the picker. A spoofed key can still
+# surface a name that doesn't exist: gwm then refuses it. Pure/testable.
+#   $1 = exec | clean
+gwm_profile_names() {
+  local fields text
+  case ${1:-} in exec) fields='command|jobs|container\.[a-z_]+' ;; clean) fields='dirs' ;; *) return 0 ;; esac
+  text=$(cat)
+  case $text in *'"""'* | *"'''"*) return 0 ;; esac
+  printf '%s\n' "$text" \
+    | sed -En "s/^$1\\.profiles\\.([A-Za-z0-9_][A-Za-z0-9_-]*)\\.($fields) = .*/\\1/p" | awk '!seen[$0]++'
 }
 
 # Extract the PR number from a GitHub PR URL, strictly validated. Prints nothing

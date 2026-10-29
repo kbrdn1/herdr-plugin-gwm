@@ -26,7 +26,7 @@ sed "s|@ROOT@|$S/root|g" tests/fixtures/herdr-worktree-list.json >"$S/wt.json"
 sed "s|@ROOT@|$S/root|g" tests/fixtures/herdr-pane-list.json >"$S/panes.json"
 cp tests/fixtures/gwm-types.txt "$S/types.txt"
 cp tests/fixtures/gh-pr-list.txt "$S/gh.txt"
-: >"$S/config.txt"
+: >"$S/config-exec.txt"; : >"$S/config-clean.txt"
 jq -r '.[].path' "$S/list.json" | while read -r p; do mkdir -p "$p"; done
 wt() { printf '%s' "$S/root/worktrees/acme-api/$1"; }
 caller=$(wt chore-63-bump-axum)   # panes run with --cwd = the invoking workspace
@@ -40,7 +40,8 @@ out=$(printf '%q ' gwm "$@"); printf '%s\n' "${out% }" >>"$STUB/log"
 printf '%s\n' "$PWD" >>"$STUB/cwd.log"
 case $1 in
   types) cat "$STUB/types.txt" ;;
-  config) cat "$STUB/config.txt" ;;   # `config list`: empty = a repo without profiles
+  config) # `config list --prefix <kind>.profiles`; empty files = a repo without profiles
+    case " $* " in *" exec.profiles "*) cat "$STUB/config-exec.txt" ;; *" clean.profiles "*) cat "$STUB/config-clean.txt" ;; esac ;;
   bootstrap) cat >"$STUB/stdin.log" ;;   # what a trust prompt would read
   list)  cat "$STUB/list.json" ;;
   path)  jq -c --arg p "$2" '[.[] | select(.name | contains($p))][0] // empty | {name, path, branch}' "$STUB/list.json" ;;
@@ -371,41 +372,51 @@ check "clean: report fails → no --yes" "$(q gwm clean)" "$(tail -n1 "$S/log")"
 
 # --- exec / clean ------------------------------------------------------------
 # No profiles: the plain prompt, as before.
+cfg_exec=$(q gwm config list --prefix exec.profiles) cfg_clean=$(q gwm config list --prefix clean.profiles)
 run exec.sh "git fetch --prune"
 check "exec: the typed line runs through bash -c, as one argument" "$(lines \
-  "$(q gwm config list)" \
+  "$cfg_exec" \
   "$(q gwm exec -- bash -c 'git fetch --prune')")" "$(calls)"
 run exec.sh $'git fetch\n3'
 check "exec: jobs N → --jobs N" "$(q gwm exec --jobs 3 -- bash -c 'git fetch')" "$(tail -n1 "$S/log")"
 run exec.sh $'git fetch\n0'
-check "exec: jobs must be a positive number (0 refused, nothing runs)" "$(q gwm config list)" "$(calls)"
+check "exec: jobs must be a positive number (0 refused, nothing runs)" "$cfg_exec" "$(calls)"
 run exec.sh $'git fetch\n2; rm -rf /'
-check "exec: jobs is digits only (no injection)" "$(q gwm config list)" "$(calls)"
+check "exec: jobs is digits only (no injection)" "$cfg_exec" "$(calls)"
+GWM_FAIL='exec -- bash -c false' run exec.sh "false"
+check "exec: a failing run is not reported as done" "finished with failures" "$(grep -o 'finished with failures' "$S/out")"
 
-# With profiles ([exec.profiles.*] / [clean.profiles.*]): picked from a list.
-cp tests/fixtures/gwm-config-list.txt "$S/config.txt"
+# With profiles: picked by NAME (real `--prefix` captures, hostile keys included).
+cp tests/fixtures/gwm-config-profiles-exec.txt "$S/config-exec.txt"
+cp tests/fixtures/gwm-config-profiles-clean.txt "$S/config-clean.txt"
 FZF_PICK='test' run exec.sh ""
-check "exec: picker = typed command first, then each profile and its command" \
-  "$(printf '(type a command)\nfmt\t["true"]\ntest\t["git", "status", "--short"]')" "$(cat "$S/fzf.in")"
-check "exec: a picked profile → gwm exec --profile <name>" "$(q gwm exec --profile test)" "$(tail -n1 "$S/log")"
+check "exec: picker = typed command first, then profile NAMES only (no command shown)" \
+  "$(printf '(type a command)\nbox\nfmt\nlint\ntest')" "$(cat "$S/fzf.in")"
+check "exec: a picked profile → gwm exec --profile=<name>" "$(q gwm exec --profile=test)" "$(tail -n1 "$S/log")"
 FZF_PICK=fmt run exec.sh "4"
-check "exec: profile + jobs" "$(q gwm exec --jobs 4 --profile fmt)" "$(tail -n1 "$S/log")"
+check "exec: profile + jobs" "$(q gwm exec --jobs 4 --profile=fmt)" "$(tail -n1 "$S/log")"
 FZF_PICK='(type a command)' run exec.sh "make lint"
 check "exec: the typed-command entry still prompts" "$(q gwm exec -- bash -c 'make lint')" "$(tail -n1 "$S/log")"
+cp tests/fixtures/gwm-config-profiles-exec-multiline.txt "$S/config-exec.txt"
+run exec.sh "git fetch"
+check "exec: a multi-line value in the profiles → no picker, the plain prompt" "" "$(cat "$S/fzf.in")"
+check "exec: … and the typed command runs" "$(q gwm exec -- bash -c 'git fetch')" "$(tail -n1 "$S/log")"
 
 FZF_PICK=deep run clean.sh "y"
+check "clean: picker = default set, then profile names (default not listed twice)" \
+  "$(printf '(default set)\ndeep')" "$(cat "$S/fzf.in")"
 check "clean: a picked profile drives the report AND the deletion" "$(lines \
-  "$(q gwm config list)" \
-  "$(q gwm clean --profile deep)" \
-  "$(q gwm clean --profile deep --yes)")" "$(calls)"
+  "$cfg_clean" \
+  "$(q gwm clean --profile=deep)" \
+  "$(q gwm clean --profile=deep --yes)")" "$(calls)"
 FZF_PICK='(default set)' run clean.sh "n"
-check "clean: the default set → plain gwm clean" "$(lines "$(q gwm config list)" "$(q gwm clean)")" "$(calls)"
-: >"$S/config.txt"
+check "clean: the default set → plain gwm clean" "$(lines "$cfg_clean" "$(q gwm clean)")" "$(calls)"
+: >"$S/config-exec.txt"; : >"$S/config-clean.txt"
 
 run clean.sh "n"
-check "clean: no profiles → report only on N" "$(lines "$(q gwm config list)" "$(q gwm clean)")" "$(calls)"
+check "clean: no profiles → report only on N" "$(lines "$cfg_clean" "$(q gwm clean)")" "$(calls)"
 run clean.sh "y"
-check "clean: y → report, then --yes" "$(lines "$(q gwm config list)" "$(q gwm clean)" "$(q gwm clean --yes)")" "$(calls)"
+check "clean: y → report, then --yes" "$(lines "$cfg_clean" "$(q gwm clean)" "$(q gwm clean --yes)")" "$(calls)"
 
 # --- worktree.created hook ---------------------------------------------------
 # herdr starts hooks in the plugin dir; gwm must run from the worktree itself.

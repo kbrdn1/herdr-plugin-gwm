@@ -1,0 +1,2 @@
+clean.profiles.deep.dirs = ["target", ".cache"]
+clean.profiles.default.dirs = ["target"]
