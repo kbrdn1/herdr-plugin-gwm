@@ -54,8 +54,11 @@ printf '%s\n\n' "$preview"
 
 # Map herdr's reflections now — before the question, so it can name them, and
 # before the removal, after which the path is gone: the worktree's own
-# workspace, and the tabs elsewhere whose panes all sit inside it.
-wsid=$("$herdr" worktree list --cwd "$path" 2>/dev/null | herdr_ws_id_for_path "$path")
+# workspace, and the tabs elsewhere whose panes all sit inside it. herdr is
+# asked from $PWD, not from the path: a worktree deleted out of band (still
+# listed, prunable) has no directory for herdr to find its repo from, and $PWD
+# is that repo in both modes (multi-repo mode cd'd to its main checkout above).
+wsid=$("$herdr" worktree list --cwd "$PWD" 2>/dev/null | herdr_ws_id_for_path "$path")
 panes=$("$herdr" pane list 2>/dev/null)
 tabs=$(herdr_closable_tabs "$path" "$wsid" <<<"$panes")
 if [[ -n $wsid || -n $tabs ]]; then
