@@ -1,0 +1,4 @@
+# bin/*.sh source ../lib/common.sh: resolve that directive from the script's
+# own directory (not the cwd) and follow it, so common.sh is checked in context.
+source-path=SCRIPTDIR
+external-sources=true
