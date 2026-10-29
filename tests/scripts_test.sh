@@ -121,6 +121,10 @@ cp "$S/list.json" "$S/list.idle"; cp "$S/list.active" "$S/list.json"
 FZF_PICK=feat-42 run switch.sh ""
 check "switch: an active session is starred (@claude*)" \
   'feat-42-payment-webhooks  #42  ±  @claude*' "$(grep '^feat-42' "$S/fzf.in")"
+# `agents` is gwm's experimental tier: a reshaped field drops the badge, never rows.
+jq '(.[] | select(.name == "fix-57-rate-limit-headers") | .agents) = "reshaped"' "$S/list.idle" >"$S/list.json"
+FZF_PICK=feat-42 run switch.sh ""
+check "switch: a reshaped agents field keeps every worktree listed" "5" "$(grep -c . "$S/fzf.in")"
 cp "$S/list.idle" "$S/list.json"
 
 FZF_PICK=docs-71 run switch.sh ""
@@ -184,8 +188,8 @@ check "create: no issue match → gwm path fallback on the typed desc" "$(lines 
   "$(q herdr worktree list --cwd "$caller")" \
   "$(q herdr worktree open --workspace w1 --path "$(wt feat-42-payment-webhooks)" --label 'feat/#42-payment-webhooks' --focus)")" "$(calls)"
 
-check "create: type picker = gwm types (no \"(source:\" footer), then auto" \
-  "feat fix hotfix docs test refactor chore perf ci build auto" "$(paste -sd' ' "$S/fzf.in")"
+check "create: type picker = gwm types (no \"(source:\" footer), then the (auto) entry" \
+  "feat fix hotfix docs test refactor chore perf ci build (auto) type from the issue labels" "$(paste -sd' ' "$S/fzf.in")"
 
 FZF_PICK=auto run create.sh $'57'
 check "create: auto → gwm create --issue N, type left to the issue's labels" "$(lines \
@@ -195,6 +199,14 @@ check "create: auto → gwm create --issue N, type left to the issue's labels" "
   "$(q herdr worktree list --cwd "$caller")" \
   "$adopt57")" "$(calls)"
 check "create: auto asks no description" "" "$(grep -o 'Description' "$S/out")"
+
+# A repo may legally declare a branch type named `auto` (gwm: ^[a-z]+$): picking
+# it must create an `auto` branch, not trigger the label-derived path.
+cp "$S/types.txt" "$S/types.orig"; printf '  auto      A configured type\n' >>"$S/types.txt"
+FZF_PICK=auto run create.sh $'57\nmy-desc'
+check "create: a configured type named auto is a normal type" \
+  "$(q gwm create auto 57 my-desc)" "$(sed -n 2p "$S/log")"
+cp "$S/types.orig" "$S/types.txt"
 
 FZF_PICK=fix run create.sh $'abc\nx'
 check "create: non-digit issue → refused before gwm create" "$(q gwm types)" "$(calls)"
