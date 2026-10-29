@@ -409,6 +409,8 @@ check "clean: a picked profile drives the report AND the deletion" "$(lines \
   "$cfg_clean" \
   "$(q gwm clean --profile=deep)" \
   "$(q gwm clean --profile=deep --yes)")" "$(calls)"
+GWM_FAIL='clean --profile=deep --yes' FZF_PICK=deep run clean.sh "y"
+check "clean: a failing deletion is not reported as done" "finished with failures" "$(grep -o 'finished with failures' "$S/out")"
 FZF_PICK='(default set)' run clean.sh "n"
 check "clean: the default set → plain gwm clean" "$(lines "$cfg_clean" "$(q gwm clean)")" "$(calls)"
 : >"$S/config-exec.txt"; : >"$S/config-clean.txt"

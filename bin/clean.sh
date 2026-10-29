@@ -29,6 +29,9 @@ gwm clean ${profile:+"--profile=$profile"} || die "gwm clean failed (see above)"
 
 printf '\nDelete the reported artifacts? [y/N] '; read -r ans
 [[ $ans =~ ^[Yy]$ ]] || { printf 'cancelled\n'; exit 0; }
-gwm clean ${profile:+"--profile=$profile"} --yes
-
-printf '\n\033[32mdone\033[0m — press any key to close'; read -rn1
+if gwm clean ${profile:+"--profile=$profile"} --yes; then
+  printf '\n\033[32mdone\033[0m — press any key to close'
+else
+  printf '\n\033[31mfinished with failures (see above)\033[0m — press any key to close'
+fi
+read -rn1
