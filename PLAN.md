@@ -315,7 +315,7 @@ herdr-plugin-gwm/
   tests/
     common_test.sh           # helpers purs + argv d'adopt_worktree contre un herdr stub
     scripts_test.sh          # bin/*.sh contre des stubs gwm/herdr/fzf/gh (argv exact)
-    fixtures/                # vraies sorties gwm 1.11 (chemins réécrits) + worktree list herdr
+    fixtures/                # vraies sorties gwm 1.11 (chemins réécrits) ; worktree list herdr (schéma v0.9.5) et gh pr list construits
   .github/workflows/ci.yml   # shellcheck + tests (PR, push dev/main)
   .shellcheckrc              # source-path=SCRIPTDIR : suit le source de lib/common.sh
   README.md  PLAN.md  LICENSE  .gitignore

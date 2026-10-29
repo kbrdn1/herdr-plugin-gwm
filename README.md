@@ -127,7 +127,7 @@ bash tests/scripts_test.sh   # bin/*.sh against stub gwm / herdr / fzf / gh
 shellcheck bin/*.sh lib/*.sh # config in .shellcheckrc (follows the lib/common.sh source)
 ```
 
-`scripts_test.sh` runs every script with stubs first on `PATH`, fed from fixtures of real gwm 1.11 output (`tests/fixtures/`, paths rewritten), and asserts the exact argv each one sends to gwm and herdr: switch (adopt / focus / tab), remove (N / y), create (positional, `--issue`, `057`, bad issue), review (forged URL, link click, `gh` picker), exec, clean, and the `worktree.created` hook (bootstrap run from inside the worktree).
+`scripts_test.sh` runs every script with stubs first on `PATH`, fed from `tests/fixtures/` (real gwm 1.11 `list` / `types` output with paths rewritten; herdr's `worktree list` and `gh pr list` built from their documented formats), and asserts the exact argv each one sends to gwm and herdr: switch (adopt / focus / tab), remove (N / y), create (positional, `--issue`, `057`, bad issue), review (forged URL, link click, `gh` picker), exec, clean, and the `worktree.created` hook (bootstrap run from inside the worktree).
 
 `common_test.sh` covers the pure logic: context-cwd fallback, `open_mode` / `fzf_theme` resolution, the fzf wrapper (theme inheritance, and surviving `set -u` without `FZF_DEFAULT_OPTS`), PR-URL parsing (with forged-URL rejection), the gwm↔herdr path mapping (trailing-slash normalization), event-payload path extraction (from herdr's event envelope, flat shapes rejected), the argv `adopt_worktree` sends to a stub herdr (root-workspace resolution, `worktree open --path`, `open_mode = "tab"`), and the adopt-only guardrail.
 
