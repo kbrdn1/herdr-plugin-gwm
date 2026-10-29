@@ -50,7 +50,9 @@ fzf_theme() {
 # stay in a split (create/review/exec) go full-bleed instead — fine, and one
 # shared helper beats a per-caller margin flag.
 wt_fzf() {
-  local opts=$FZF_DEFAULT_OPTS
+  # :- because every script runs under `set -u`: an unset FZF_DEFAULT_OPTS
+  # would kill the picker subshell and the caller would read it as a cancel.
+  local opts=${FZF_DEFAULT_OPTS:-}
   [[ $(fzf_theme) == clean ]] && opts=''
   FZF_DEFAULT_OPTS="$opts" fzf \
     --no-preview --bind 'focus:ignore' --bind 'ctrl-r:ignore' --header-label ' gwm ' \
