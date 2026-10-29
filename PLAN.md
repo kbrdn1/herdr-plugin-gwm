@@ -314,6 +314,8 @@ herdr-plugin-gwm/
     on_worktree_created.sh   # hook de l'event worktree.created
   tests/
     common_test.sh           # helpers purs + argv d'adopt_worktree contre un herdr stub
+    scripts_test.sh          # bin/*.sh contre des stubs gwm/herdr/fzf/gh (argv exact)
+    fixtures/                # vraies sorties gwm 1.11 (chemins réécrits) ; worktree list herdr (schéma v0.9.5) et gh pr list construits
   .github/workflows/ci.yml   # shellcheck + tests (PR, push dev/main)
   .shellcheckrc              # source-path=SCRIPTDIR : suit le source de lib/common.sh
   README.md  PLAN.md  LICENSE  .gitignore
@@ -335,13 +337,19 @@ Pas de `[[build]]` (bash, rien à compiler) → `plugin link` marche direct, et
 - `adopt_worktree` contre un `HERDR_BIN_PATH` stub qui journalise son argv,
 - le garde-fou : aucun chemin de code n'émet `worktree create` / `--branch`.
 
-CI (`.github/workflows/ci.yml`) : `shellcheck bin/*.sh lib/*.sh` + la suite, sur
+CI (`.github/workflows/ci.yml`) : `shellcheck bin/*.sh lib/*.sh` + les deux suites, sur
 chaque PR et sur push `dev`/`main`. Le shellcheck du runner (0.9.0 sur
 ubuntu-latest) peut remonter ce qu'un 0.11 local ne voit plus (SC2119).
 
-Les scripts `bin/*` se valident à la main avec un `HERDR_BIN_PATH` stub + un
-`fzf` stub contre le vrai gwm (fixture `~/gwm-demo` en lecture seule, repo
-scratch pour ce qui mute). Ce qui ne se vérifie qu'en live : popup (cwd/env),
+`tests/scripts_test.sh` (CI aussi) lance chaque `bin/*.sh` avec des stubs
+`gwm` / `fzf` / `gh` en tête du `PATH` et un herdr joignable seulement via
+`$HERDR_BIN_PATH` (un `herdr` nu tombe sur un piège), nourris de fixtures tirées de
+vraies sorties gwm 1.11 (`tests/fixtures/`, chemins réécrits ; le `worktree list`
+herdr suit le schéma v0.9.5), et vérifie l'argv exact envoyé à gwm et à herdr.
+
+Ce que les stubs ne remplacent pas : le vrai gwm (contre `~/gwm-demo` en lecture
+seule, un repo scratch pour ce qui mute, un clone relié à la forge pour
+`--issue`), et ce qui ne se vérifie qu'en live : popup (cwd/env),
 vrai Ctrl-clic sur une URL, déclenchement réel de l'event, rechargement du
 manifest d'un plugin lié.
 

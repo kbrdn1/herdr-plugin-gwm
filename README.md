@@ -131,12 +131,15 @@ $HERDR_BIN_PATH worktree open --path …     # herdr adopts (never creates)
 
 ```bash
 bash tests/common_test.sh    # pure-helper tests — no herdr/gwm instance needed
+bash tests/scripts_test.sh   # bin/*.sh against stub gwm / herdr / fzf / gh
 shellcheck bin/*.sh lib/*.sh # config in .shellcheckrc (follows the lib/common.sh source)
 ```
 
-Covers the pure logic: context-cwd fallback, `open_mode` / `fzf_theme` resolution, the fzf wrapper (theme inheritance, and surviving `set -u` without `FZF_DEFAULT_OPTS`), PR-URL parsing (with forged-URL rejection), the gwm↔herdr path mapping (trailing-slash normalization), event-payload path extraction (from herdr's event envelope, flat shapes rejected), the argv `adopt_worktree` sends to a stub herdr (root-workspace resolution, `worktree open --path`, `open_mode = "tab"`), and the adopt-only guardrail.
+`scripts_test.sh` runs every script with stub `gwm` / `fzf` / `gh` first on `PATH` and a stub herdr reachable only through `$HERDR_BIN_PATH` (a bare `herdr` hits a failing trap), fed from `tests/fixtures/` (real gwm 1.11 `list` / `types` output with paths rewritten; herdr's `worktree list` and `gh pr list` built from their documented formats), and asserts the exact argv each one sends to gwm and herdr: switch (adopt / focus / tab), remove (N / y), create (positional, `--issue`, `057`, bad issue), review (forged URL, link click, `gh` picker), exec, clean, and the `worktree.created` hook (bootstrap run from inside the worktree).
 
-CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs both on every pull request and on pushes to `dev` and `main`.
+`common_test.sh` covers the pure logic: context-cwd fallback, `open_mode` / `fzf_theme` resolution, the fzf wrapper (theme inheritance, and surviving `set -u` without `FZF_DEFAULT_OPTS`), PR-URL parsing (with forged-URL rejection), the gwm↔herdr path mapping (trailing-slash normalization), event-payload path extraction (from herdr's event envelope, flat shapes rejected), the argv `adopt_worktree` sends to a stub herdr (root-workspace resolution, `worktree open --path`, `open_mode = "tab"`), and the adopt-only guardrail.
+
+CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs shellcheck and both suites on every pull request and on pushes to `dev` and `main`.
 
 Dev loop:
 

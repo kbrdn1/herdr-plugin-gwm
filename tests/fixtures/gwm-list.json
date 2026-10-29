@@ -1,0 +1,163 @@
+[
+  {
+    "name": "acme-api",
+    "id": "acme-api",
+    "path": "@ROOT@/acme-api/",
+    "branch": "main",
+    "head": "678c9ac4471ff501ebc4412179d975e82cf8c7e7",
+    "is_main": true,
+    "is_locked": false,
+    "is_prunable": false,
+    "status": {
+      "is_dirty": false,
+      "has_upstream": false,
+      "ahead": 0,
+      "behind": 0,
+      "unknown": false
+    },
+    "age_seconds": null,
+    "issue": null,
+    "pr": null
+  },
+  {
+    "name": "fix-57-rate-limit-headers",
+    "id": "fix-57-rate-limit-headers",
+    "path": "@ROOT@/worktrees/acme-api/fix-57-rate-limit-headers",
+    "branch": "fix/#57-rate-limit-headers",
+    "head": "0aef1336019c0f5faae2a64ea6acf233a8b4ee76",
+    "is_main": false,
+    "is_locked": false,
+    "is_prunable": false,
+    "status": {
+      "is_dirty": false,
+      "has_upstream": false,
+      "ahead": 0,
+      "behind": 0,
+      "unknown": false
+    },
+    "age_seconds": 583495,
+    "issue": 57,
+    "pr": null,
+    "agents": {
+      "top": {
+        "kind": "codex",
+        "freshness": "idle",
+        "last_activity": 1793049321,
+        "id": "0199f2b6-4c7a-7331-8d15-2be9c04af8e1",
+        "name": "Emit Retry-After on every 429"
+      },
+      "sessions": [
+        {
+          "kind": "codex",
+          "freshness": "idle",
+          "last_activity": 1793049321,
+          "id": "0199f2b6-4c7a-7331-8d15-2be9c04af8e1",
+          "name": "Emit Retry-After on every 429"
+        }
+      ]
+    }
+  },
+  {
+    "name": "docs-71-openapi-examples",
+    "id": "docs-71-openapi-examples",
+    "path": "@ROOT@/worktrees/acme-api/docs-71-openapi-examples",
+    "branch": "docs/#71-openapi-examples",
+    "head": "678c9ac4471ff501ebc4412179d975e82cf8c7e7",
+    "is_main": false,
+    "is_locked": false,
+    "is_prunable": false,
+    "status": {
+      "is_dirty": false,
+      "has_upstream": false,
+      "ahead": 0,
+      "behind": 0,
+      "unknown": false
+    },
+    "age_seconds": 255895,
+    "issue": 71,
+    "pr": null,
+    "agents": {
+      "top": {
+        "kind": "claude",
+        "freshness": "idle",
+        "last_activity": 1793042121,
+        "id": "019f6a04-88b1-7e52-a3d9-16c40b9e2277",
+        "name": "Draft the OpenAPI examples for the payments endpoints"
+      },
+      "sessions": [
+        {
+          "kind": "claude",
+          "freshness": "idle",
+          "last_activity": 1793042121,
+          "id": "019f6a04-88b1-7e52-a3d9-16c40b9e2277",
+          "name": "Draft the OpenAPI examples for the payments endpoints"
+        }
+      ]
+    }
+  },
+  {
+    "name": "chore-63-bump-axum",
+    "id": "chore-63-bump-axum",
+    "path": "@ROOT@/worktrees/acme-api/chore-63-bump-axum",
+    "branch": "chore/#63-bump-axum",
+    "head": "678c9ac4471ff501ebc4412179d975e82cf8c7e7",
+    "is_main": false,
+    "is_locked": false,
+    "is_prunable": false,
+    "status": {
+      "is_dirty": true,
+      "has_upstream": false,
+      "ahead": 0,
+      "behind": 0,
+      "unknown": false
+    },
+    "age_seconds": 410695,
+    "issue": 63,
+    "pr": null
+  },
+  {
+    "name": "feat-42-payment-webhooks",
+    "id": "feat-42-payment-webhooks",
+    "path": "@ROOT@/worktrees/acme-api/feat-42-payment-webhooks",
+    "branch": "feat/#42-payment-webhooks",
+    "head": "f9e8a58e6453bca3134beafb1d7866ca4d704673",
+    "is_main": false,
+    "is_locked": false,
+    "is_prunable": false,
+    "status": {
+      "is_dirty": true,
+      "has_upstream": false,
+      "ahead": 0,
+      "behind": 0,
+      "unknown": false
+    },
+    "age_seconds": 1015495,
+    "issue": 42,
+    "pr": null,
+    "agents": {
+      "top": {
+        "kind": "claude",
+        "freshness": "idle",
+        "last_activity": 1793049321,
+        "id": "2f8c1a94-7d0e-4b52-9c31-6ae08f5db417",
+        "name": "Add idempotency keys to the Stripe webhook handler"
+      },
+      "sessions": [
+        {
+          "kind": "claude",
+          "freshness": "idle",
+          "last_activity": 1793049321,
+          "id": "2f8c1a94-7d0e-4b52-9c31-6ae08f5db417",
+          "name": "Add idempotency keys to the Stripe webhook handler"
+        },
+        {
+          "kind": "claude",
+          "freshness": "idle",
+          "last_activity": 1793038521,
+          "id": "019f6b95-c1e4-7a3d-9f02-4b18ac775e30",
+          "name": "Verify the Stripe signature before the handler runs"
+        }
+      ]
+    }
+  }
+]

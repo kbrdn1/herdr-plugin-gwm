@@ -1,0 +1,12 @@
+  feat      New feature implementation
+  fix       Bug fix
+  hotfix    Critical production bug fix
+  docs      Documentation changes
+  test      Test additions or modifications
+  refactor  Code restructuring
+  chore     Maintenance tasks
+  perf      Performance improvements
+  ci        CI/CD configuration
+  build     Build system changes
+
+(source: built-in defaults)
