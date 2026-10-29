@@ -16,7 +16,7 @@ source "$plugin_root/lib/common.sh"
 command -v gwm >/dev/null || exit 0
 command -v jq  >/dev/null || exit 0
 
-path=$(event_worktree_path)
+path=$(event_worktree_path "${HERDR_PLUGIN_EVENT_JSON:-}")
 [[ -n $path && -d $path ]] || exit 0
 
 gwm bootstrap "$path" </dev/null
