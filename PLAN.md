@@ -245,8 +245,8 @@ adopt_worktree "$path" "$branch"               # → herdr worktree open --path 
   - `tab` → `herdr tab create --cwd` (un shell dans le worktree, rien n'y est lancé) : plus léger.
 
 ### Prérequis runtime
-herdr ≥ 0.7.4 (panes popup) · `gwm` sur PATH (≥ 1.10 pour `create --issue`,
-qui a aussi besoin de la forge du repo) · `jq` · `fzf` · `bash` · plateformes
+herdr ≥ 0.7.4 (panes popup) · `gwm` ≥ 1.0 sur PATH (≥ 1.3 pour les badges
+d'agents, ≥ 1.10 pour `create --issue`, qui a aussi besoin de la forge du repo) · `jq` · `fzf` · `bash` · plateformes
 macos/linux.
 
 ---
@@ -263,10 +263,13 @@ macos/linux.
       `wt_fzf`, `herdr_ws_id_for_path`, `event_worktree_path`,
       `pr_number_from_url`, et le **garde-fou** `adopt_worktree <path> <label>`
       (seul chemin vers herdr : `worktree open --path` ou `tab create --cwd`).
-- [x] `bin/create.sh` : fzf sur `gwm types` → issue → desc (vide = `gwm create
-      --issue`, gwm ≥ 1.10) → `gwm create` → résolution par l'issue dans
-      `gwm list` (repli `gwm path`) → `adopt_worktree`.
-- [x] `bin/switch.sh` : `gwm list --format=json` → fzf (badges issue/PR/±/↑/↓,
+- [x] `bin/create.sh` : fzf sur `gwm types` (sans son pied `(source: …)`) +
+      `auto` → issue → desc (vide = `gwm create --issue N --type T`, gwm ≥ 1.10 ;
+      `auto` = `gwm create --issue N`, type depuis les labels, pas de desc) →
+      résolution par l'issue dans `gwm list` (repli `gwm path` si desc saisie)
+      → `adopt_worktree`.
+- [x] `bin/switch.sh` : `gwm list --format=json` → fzf (badges issue/PR/±/↑/↓
+      + `@<agent>` / `@<agent>*` depuis le champ optionnel `agents`, gwm ≥ 1.3 ;
       pas de CI : il faudrait un appel réseau par worktree) → `workspace focus`
       si déjà ouvert, sinon `adopt_worktree`.
 - [x] `bin/remove.sh` : fzf sur les worktrees non-main → **confirmation** (gwm
