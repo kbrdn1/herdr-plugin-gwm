@@ -72,7 +72,8 @@ herdr_ws_id_for_path() {
 
 # Given a worktree path, print the herdr tabs that only reflect it: EVERY pane of
 # the tab has its cwd inside the worktree (the path itself or below it, on a "/"
-# boundary). A pane elsewhere, or with no cwd, keeps its tab out. Tabs of
+# boundary), its foreground program's cwd too when herdr reports one. A pane
+# elsewhere, or with no cwd, keeps its tab out. Tabs of
 # workspace $2 are skipped. Reads `herdr pane list` output on stdin.
 #   herdr_tabs_for_path  → every such tab (switch: one to focus)
 #   herdr_closable_tabs  → minus any workspace's last ones (remove: ones to
@@ -85,7 +86,8 @@ _herdr_tabs() { # <path> <skip-ws> <close: true|false>
   jq -r --arg p "$path" --arg skip "$2" --argjson close "$3" '
     [ [.result.panes[]? | select(.workspace_id != $skip)] | group_by(.tab_id)[]
       | { ws: .[0].workspace_id, tab: .[0].tab_id,
-          inside: all(.[]; (.cwd // "" | rtrimstr("/")) as $c | $c == $p or ($c | startswith($p + "/"))) } ]
+          inside: all(.[]; .cwd != null and all(.cwd, (.foreground_cwd // empty);
+            rtrimstr("/") as $c | $c == $p or ($c | startswith($p + "/")))) } ]
     | . as $tabs | .[] | select(.inside) | .ws as $w
     | select(($close | not) or any($tabs[]; .ws == $w and (.inside | not))) | .tab' 2>/dev/null
 }
@@ -93,9 +95,10 @@ herdr_tabs_for_path() { _herdr_tabs "$1" "${2:-}" false; }
 herdr_closable_tabs() { _herdr_tabs "$1" "${2:-}" true; }
 
 # One field of the invocation context herdr injects (HERDR_PLUGIN_CONTEXT_JSON),
-# e.g. workspace_id / tab_id. Popups get no HERDR_WORKSPACE_ID / HERDR_TAB_ID
-# (herdr launches them without a pane identity), so the caller's workspace and
-# tab live here. Pure/testable.
+# e.g. workspace_id / tab_id. Popups get no HERDR_WORKSPACE_ID / HERDR_TAB_ID of
+# their own (herdr launches them without a pane identity; whatever the server's
+# env holds leaks through), so the caller's workspace and tab are read here
+# FIRST, the env only as a fallback. Pure/testable.
 ctx_field() {
   [[ -n ${HERDR_PLUGIN_CONTEXT_JSON:-} ]] || return 0
   jq -r --arg k "$1" '.[$k] // empty' <<<"$HERDR_PLUGIN_CONTEXT_JSON" 2>/dev/null
@@ -125,7 +128,7 @@ adopt_worktree() {
   if [[ $(open_mode) == tab ]]; then
     # The caller's workspace: without --workspace herdr would use the one its
     # server has focused. Popups carry it only in the context JSON.
-    local ws=${HERDR_WORKSPACE_ID:-$(ctx_field workspace_id)}
+    local ws; ws=$(ctx_field workspace_id); ws=${ws:-${HERDR_WORKSPACE_ID:-}}
     exec "$herdr" tab create ${ws:+--workspace "$ws"} --cwd "$path" --label "$label" --focus
   fi
   # Adopt under the repo ROOT workspace. Opening from inside a linked-worktree

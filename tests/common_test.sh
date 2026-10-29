@@ -87,6 +87,8 @@ check "closable: never the last tabs of a workspace; only w6:t1 (w6 keeps w6:t2)
   "$(printf '%s' "$two" | herdr_closable_tabs /r/wt)"
 check "tabs: a pane with no cwd keeps its tab" "" \
   "$(printf '%s' '{"result":{"panes":[{"workspace_id":"w1","tab_id":"w1:t9","cwd":"/r/wt"},{"workspace_id":"w1","tab_id":"w1:t9"}]}}' | herdr_tabs_for_path /r/wt)"
+fg='{"result":{"panes":[{"workspace_id":"w1","tab_id":"w1:t1","cwd":"/r/wt","foreground_cwd":"/r/elsewhere"},{"workspace_id":"w1","tab_id":"w1:t2","cwd":"/r/wt","foreground_cwd":"/r/wt/src"},{"workspace_id":"w1","tab_id":"w1:t3","cwd":"/r/other"}]}}'
+check "tabs: a foreground program working elsewhere keeps its tab" "w1:t2" "$(printf '%s' "$fg" | herdr_tabs_for_path /r/wt)"
 check "tabs: empty path matches nothing" "" "$(printf '%s' "$panes" | herdr_tabs_for_path "")"
 check "tabs: \"/\" matches nothing" "" "$(printf '%s' "$panes" | herdr_closable_tabs /)"
 
@@ -127,6 +129,11 @@ check "adopt: open_mode=tab → tab create" \
 (export HSTUB_LOG=$hstub/log HERDR_BIN_PATH=$hstub/herdr HERDR_PLUGIN_CONFIG_DIR=$hstub HERDR_PLUGIN_CONTEXT_JSON='{"workspace_id":"w6"}'
  unset HERDR_WORKSPACE_ID; adopt_worktree "$wtdir" feat/x)
 check "adopt: tab mode in a popup takes the workspace from the context" \
+  "tab create --workspace w6 --cwd $wtdir --label feat/x --focus" "$(cat "$hstub/log")"
+: >"$hstub/log"
+(export HSTUB_LOG=$hstub/log HERDR_BIN_PATH=$hstub/herdr HERDR_PLUGIN_CONFIG_DIR=$hstub HERDR_PLUGIN_CONTEXT_JSON='{"workspace_id":"w6"}' HERDR_WORKSPACE_ID=w9
+ adopt_worktree "$wtdir" feat/x)
+check "adopt: the context wins over a stale HERDR_WORKSPACE_ID leaked from the server env" \
   "tab create --workspace w6 --cwd $wtdir --label feat/x --focus" "$(cat "$hstub/log")"
 rm -rf "$hstub" "$wtdir"
 
