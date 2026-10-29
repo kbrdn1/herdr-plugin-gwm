@@ -33,6 +33,7 @@ name=${sel%%[[:space:]]*}
 
 path=$(printf '%s\n' "$wtjson" | jq -r --arg n "$name" '.[] | select(.name == $n) | .path' | head -n1)
 [[ -z $path || $path == null ]] && die "couldn't resolve path for: $name"
+dirty=$(printf '%s\n' "$wtjson" | jq -r --arg n "$name" '.[] | select(.name == $n) | .status.is_dirty // false' | head -n1)
 
 # Preview with gwm's own resolution (name, path, branch). An ambiguous or unknown
 # pattern fails here, before anything is asked.
@@ -58,6 +59,10 @@ if [[ -n $wsid || -n $tabs ]]; then
   printf '\n'
 fi
 
+# Uncommitted / untracked files are deleted with the directory: neither y nor D
+# keeps them, and `gwm undo` only recreates the branch at its tip.
+[[ $dirty == true ]] && printf '\033[31mit has uncommitted changes: they are deleted with it (gwm undo does not bring them back)\033[0m\n\n'
+
 # Confirm — gwm remove is destructive and won't ask.
 #   y  remove, keep the branch (the work stays reachable as a branch)
 #   D  delete the branch too, even with unmerged commits: gwm journals its tip
@@ -77,7 +82,12 @@ esac
 fresh=$("$herdr" pane list 2>/dev/null | herdr_closable_tabs "$path" "$wsid")
 
 # ${del:+…}: no empty argument, and no empty-array expansion (bash 3.2 + set -u).
-gwm remove "$name" ${del:+"$del"} || die "gwm remove failed (see above)"
+# A non-zero exit with the worktree already gone (a failing post_remove hook)
+# still means the reflections now point at nothing: close them anyway.
+if ! gwm remove "$name" ${del:+"$del"}; then
+  [[ -e $path ]] && die "gwm remove failed (see above)"
+  printf '\033[33mgwm reported an error after removing it (see above)\033[0m\n'
+fi
 printf '\033[32m✓ removed %s\033[0m\n' "$name"
 
 # Close herdr's reflections so the sidebar stays in sync. This script runs in a
@@ -85,7 +95,8 @@ printf '\033[32m✓ removed %s\033[0m\n' "$name"
 # tab (our own tab, or the removed worktree's workspace) is closed LAST. A tab
 # herdr refuses to close (e.g. confirmation_required on a worktree group) is
 # left, and reported long enough to be read.
-own_tab=${HERDR_TAB_ID:-$(ctx_field tab_id)} own_ws=${HERDR_WORKSPACE_ID:-$(ctx_field workspace_id)} last=() kept=0
+own_tab=$(ctx_field tab_id) own_ws=$(ctx_field workspace_id) last=() kept=0
+own_tab=${own_tab:-${HERDR_TAB_ID:-}} own_ws=${own_ws:-${HERDR_WORKSPACE_ID:-}}
 close() { "$herdr" "$@" >/dev/null 2>&1 || kept=$((kept + 1)); }
 report() {
   printf '\033[33m%s reflection(s) left open on the removed path (herdr refused, or no longer safe to close)\033[0m\n' "$1"
