@@ -203,7 +203,7 @@ FZF_PICK=fix-57 run remove.sh "n"
 check "remove: N → preview + read-only herdr lookups, nothing removed or closed" "$(lines \
   "$(q gwm list --format=json)" \
   "$(q gwm remove fix-57-rate-limit-headers --dry-run)" \
-  "$(q herdr worktree list --cwd "$(wt fix-57-rate-limit-headers)")" \
+  "$(q herdr worktree list --cwd "$caller")" \
   "$(q herdr pane list)")" "$(calls)"
 check "remove: the preview shows gwm's resolution before the question" \
   "branch: fix/#57-rate-limit-headers" "$(grep -o 'branch: fix/#57-rate-limit-headers' "$S/out")"
@@ -222,7 +222,7 @@ FZF_PICK=docs-71 run remove.sh "y"
 check "remove: y → map reflections first, gwm remove (branch kept), close them" "$(lines \
   "$(q gwm list --format=json)" \
   "$(q gwm remove docs-71-openapi-examples --dry-run)" \
-  "$(q herdr worktree list --cwd "$(wt docs-71-openapi-examples)")" \
+  "$(q herdr worktree list --cwd "$caller")" \
   "$(q herdr pane list)" \
   "$(q herdr pane list)" \
   "$(q gwm remove docs-71-openapi-examples)" \
@@ -354,6 +354,14 @@ check "review: gh pr list picker → gwm review 9, adopt PR 9's worktree" "$(lin
   "$(q herdr worktree open --workspace w1 --path "$(wt review-pr-9-alice-fix)" --label review/pr-9-alice-fix --focus)")" "$(calls)"
 check "review: picker path exits 0" "0" "$rc"
 
+# Deleted out of band (prunable, still listed): herdr can't find a repo from a
+# missing path, so its workspace is looked up from the caller's repo.
+mv "$(wt fix-57-rate-limit-headers)" "$S/fix-57.gone"
+FZF_PICK=fix-57 run remove.sh "y"
+check "remove: a worktree whose directory is gone still has its workspace looked up" \
+  "$(q herdr worktree list --cwd "$caller")" "$(grep -F 'worktree list' "$S/log")"
+mv "$S/fix-57.gone" "$(wt fix-57-rate-limit-headers)"
+
 FZF_PICK=feat-42 run remove.sh "n"
 check "remove: a dirty worktree is flagged before the question" "uncommitted changes" "$(grep -o 'uncommitted changes' "$S/out")"
 FZF_PICK=docs-71 run remove.sh "n"
@@ -456,8 +464,8 @@ jq --arg d "$S/root/worktrees/payments-svc/fix-57-rate-limit-headers" \
 mkdir -p "$S/root/worktrees/payments-svc/fix-57-rate-limit-headers"
 FZF_PICK=payments-svc/fix-57 run remove.sh "y" "$W"
 check "workspace: remove never passes --workspace (gwm rejects it there)" "" "$(grep -F -- 'remove' "$S/log" | grep -F -- '--workspace')"
-check "workspace: remove resolves the picked repo's worktree, not the same name elsewhere" \
-  "$(q herdr worktree list --cwd "$S/root/worktrees/payments-svc/fix-57-rate-limit-headers")" "$(grep -F 'worktree list' "$S/log")"
+check "workspace: remove asks herdr from the picked repo's main checkout" \
+  "$(q herdr worktree list --cwd "$main_pay")" "$(grep -F 'worktree list' "$S/log")"
 check "workspace: gwm remove runs from that repo's main checkout" "$(lines "$W" "$main_pay" "$main_pay")" "$(cat "$S/cwd.log")"
 check "workspace: … dry-run first, then the removal" "$(lines \
   "$(q gwm remove fix-57-rate-limit-headers --dry-run)" "$(q gwm remove fix-57-rate-limit-headers)")" "$(grep '^gwm remove' "$S/log")"
