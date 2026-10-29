@@ -109,7 +109,7 @@ bash tests/common_test.sh    # pure-helper tests — no herdr/gwm instance neede
 shellcheck bin/*.sh lib/*.sh # config in .shellcheckrc (follows the lib/common.sh source)
 ```
 
-Covers the pure logic: context-cwd fallback, `open_mode` / `fzf_theme` resolution, the fzf wrapper (theme inheritance, and surviving `set -u` without `FZF_DEFAULT_OPTS`), PR-URL parsing (with forged-URL rejection), the gwm↔herdr path mapping (trailing-slash normalization), event-payload path extraction, and the adopt-only guardrail.
+Covers the pure logic: context-cwd fallback, `open_mode` / `fzf_theme` resolution, the fzf wrapper (theme inheritance, and surviving `set -u` without `FZF_DEFAULT_OPTS`), PR-URL parsing (with forged-URL rejection), the gwm↔herdr path mapping (trailing-slash normalization), event-payload path extraction (from herdr's event envelope, flat shapes rejected), the argv `adopt_worktree` sends to a stub herdr (root-workspace resolution, `worktree open --path`, `open_mode = "tab"`), and the adopt-only guardrail.
 
 CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs both on every pull request and on pushes to `dev` and `main`.
 
