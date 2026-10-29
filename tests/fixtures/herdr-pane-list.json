@@ -6,7 +6,7 @@
 {"pane_id":"w1:p6","terminal_id":"t-6","workspace_id":"w1","tab_id":"w1:t4","focused":false,"cwd":"@ROOT@/acme-api","agent_status":"unknown"},
 {"pane_id":"w1:p7","terminal_id":"t-7","workspace_id":"w1","tab_id":"w1:t5","focused":false,"cwd":"@ROOT@/worktrees/acme-api/docs-71-openapi-examples-old","agent_status":"unknown"},
 {"pane_id":"w1:p8","terminal_id":"t-8","workspace_id":"w1","tab_id":"w1:t6","focused":false,"agent_status":"unknown"},
-{"pane_id":"w9:p1","terminal_id":"t-9","workspace_id":"w9","tab_id":"w9:t1","focused":false,"cwd":"@ROOT@/worktrees/acme-api/docs-71-openapi-examples","agent_status":"unknown"},
+{"pane_id":"w9:p1","terminal_id":"t-9","workspace_id":"w9","tab_id":"w9:t1","focused":false,"cwd":"@ROOT@/worktrees/acme-api/docs-71-openapi-examples","agent":"codex","agent_status":"working"},
 {"pane_id":"w7:p1","terminal_id":"t-10","workspace_id":"w7","tab_id":"w7:t1","focused":true,"cwd":"@ROOT@/worktrees/acme-api/chore-63-bump-axum","agent_status":"unknown"},
 {"pane_id":"w7:p2","terminal_id":"t-11","workspace_id":"w7","tab_id":"w7:t2","focused":false,"cwd":"@ROOT@/worktrees/acme-api/fix-57-rate-limit-headers","agent_status":"unknown"}
 ]}}

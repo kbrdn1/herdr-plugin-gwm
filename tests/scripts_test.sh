@@ -57,8 +57,8 @@ case $1 in
     fi ;;
   remove) # --dry-run prints gwm's own resolution, in its real format
     if [[ " $* " == *" --dry-run "* ]]; then
-      jq -r --arg n "$2" --arg del "$([[ " $* " == *" --delete-branch "* ]] && printf ' (would be deleted)')" \
-        '.[] | select(.name == $n) | "would remove:\n  name:   \(.name)\n  path:   \(.path)\n  branch: \(.branch)\($del)"' "$STUB/list.json"
+      jq -r --arg n "$2" \
+        '.[] | select(.name == $n) | "would remove:\n  name:   \(.name)\n  path:   \(.path)\n  branch: \(.branch)"' "$STUB/list.json"
     fi ;;
 esac
 [[ "$*" == "${GWM_FAIL:-}" ]] && exit 1   # GWM_FAIL='<exact argv>' makes that one call fail
@@ -70,7 +70,10 @@ cat >"$S/herdr-bin/herdr" <<'EOF'
 #!/usr/bin/env bash
 out=$(printf '%q ' herdr "$@"); printf '%s\n' "${out% }" >>"$STUB/log"
 [[ "$1 $2" == "worktree list" ]] && cat "$STUB/wt.json"
-[[ "$1 $2" == "pane list" ]] && cat "$STUB/panes.json"
+if [[ "$1 $2" == "pane list" ]]; then   # panes.next, if any, answers every later call
+  n=$(cat "$STUB/pane.calls" 2>/dev/null || echo 0); echo $((n + 1)) >"$STUB/pane.calls"
+  if ((n)) && [[ -f $STUB/panes.next ]]; then cat "$STUB/panes.next"; else cat "$STUB/panes.json"; fi
+fi
 [[ "$*" == "${HERDR_FAIL:-}" ]] && exit 1   # HERDR_FAIL='<exact argv>' makes that call fail
 exit 0
 EOF
@@ -104,7 +107,7 @@ unset FZF_DEFAULT_OPTS GWM_REVIEW_URL HERDR_PLUGIN_EVENT_JSON GWM_FAIL HERDR_FAI
 
 # run <script> <stdin> [cwd] — fresh logs, then $rc / $S/log / $S/cwd.log
 run() {
-  : >"$S/log"; : >"$S/cwd.log"; : >"$S/fzf.in"
+  : >"$S/log"; : >"$S/cwd.log"; : >"$S/fzf.in"; rm -f "$S/pane.calls"
   local cwd=${3:-$caller}
   local ctx; ctx=$(jq -cn --arg cwd "$cwd" --arg ws "${CTX_WS:-w7}" --arg tab "${CTX_TAB:-w7:t1}" \
     '{workspace_id: $ws, tab_id: $tab, workspace_cwd: $cwd, focused_pane_cwd: $cwd}')
@@ -199,13 +202,14 @@ check "remove: y → map reflections first, gwm remove (branch kept), close them
   "$(q gwm remove docs-71-openapi-examples --dry-run)" \
   "$(q herdr worktree list --cwd "$caller")" \
   "$(q herdr pane list)" \
+  "$(q herdr pane list)" \
   "$(q gwm remove docs-71-openapi-examples)" \
   "$(q herdr tab close w1:t3)" \
   "$(q herdr workspace close w9)")" "$(calls)"
 check "remove: the question names what herdr will close" \
   "herdr will close: workspace w9, tab(s) w1:t3" "$(grep -o 'herdr will close: .*' "$S/out")"
 check "remove: … and the agents that will be stopped" \
-  "agent(s) running there will be stopped: claude" "$(grep -o 'agent(s) running there will be stopped: [a-z, ]*' "$S/out")"
+  "agent(s) running there will be stopped: claude, codex" "$(grep -o 'agent(s) running there will be stopped: [a-z, ]*' "$S/out")"
 
 # herdr kills this popup with the tab it was opened from: when that tab is one
 # of the reflections, it goes LAST, after the removed worktree's workspace.
@@ -223,14 +227,28 @@ FZF_PICK=docs-71 run remove.sh "y"
 check "remove: a workspace's last tab is never closed (w8:t1 kept, w8 lives)" "" "$(grep -F 'w8' "$S/log")"
 cp "$S/panes.orig" "$S/panes.json"
 
+# Re-read after the answer: w1:t3 was announced, but by now its workspace has no
+# other tab left (the "outside" ones closed meanwhile) → closing it would close
+# w1, so it is left open and reported.
+jq '.result.panes |= map(select(.workspace_id != "w1" or .tab_id == "w1:t3"))' "$S/panes.json" >"$S/panes.next"
+FZF_PICK=docs-71 run remove.sh "y"
+check "remove: an announced tab no longer safe at answer time is not closed" "" "$(grep -F 'tab close w1:t3' "$S/log")"
+check "remove: … and is reported" "1 reflection(s) left open" "$(grep -o '1 reflection(s) left open' "$S/out")"
+rm -f "$S/panes.next"
+
+# The deferred close (the caller's own tab) can be refused too: still reported.
+HERDR_FAIL='tab close w1:t3' CTX_WS=w1 CTX_TAB=w1:t3 FZF_PICK=docs-71 run remove.sh "y"
+check "remove: a refused close of the caller's own tab is reported" \
+  "1 reflection(s) left open" "$(grep -o '1 reflection(s) left open' "$S/out")"
+
 HERDR_FAIL='tab close w1:t3' FZF_PICK=docs-71 run remove.sh "y"
 check "remove: a tab herdr refuses to close is reported, the workspace still closed" \
-  "1 reflection(s) herdr would not close" "$(grep -o '1 reflection(s) herdr would not close' "$S/out")"
+  "1 reflection(s) left open" "$(grep -o '1 reflection(s) left open' "$S/out")"
 check "remove: … and the workspace close still ran" "$(q herdr workspace close w9)" "$(tail -n1 "$S/log")"
 
 FZF_PICK=docs-71 run remove.sh "D"
 check "remove: D → gwm remove --delete-branch" \
-  "$(q gwm remove docs-71-openapi-examples --delete-branch)" "$(sed -n 5p "$S/log")"
+  "$(q gwm remove docs-71-openapi-examples --delete-branch)" "$(sed -n 6p "$S/log")"
 check "remove: the prompt says D deletes even unmerged work" "even unmerged" "$(grep -o 'even unmerged' "$S/out")"
 FZF_PICK=docs-71 run remove.sh "d"
 check "remove: lowercase d is not D → cancelled, nothing removed or closed" "" \
