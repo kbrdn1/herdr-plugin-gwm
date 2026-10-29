@@ -18,7 +18,7 @@ command -v gwm >/dev/null || die "gwm not found on PATH"
 
 # 0. multi-repo mode: the worktree goes to ONE repo, whose types and .gwm.toml
 #    are its own — run the whole flow from its main checkout.
-ws=$(ws_root)
+ws=$(ws_root "$PWD")
 if [[ -n $ws ]]; then
   ws_enter_repo "$ws"
   case $? in 0) ;; 1) exit 0 ;; *) die "no repo to create the worktree in (see above)" ;; esac

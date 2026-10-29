@@ -15,10 +15,11 @@ command -v gwm >/dev/null || die "gwm not found on PATH"
 # Multi-repo mode: the run fans out over every repo below the workspace, so the
 # prompt says how many. Profiles are per-repo (`gwm config list` needs one):
 # not offered there, the typed command is.
-ws=$(ws_root) where='every non-main worktree'
+ws=$(ws_root "$PWD") where='every non-main worktree'
 if [[ -n $ws ]]; then
-  n=$(gwm list --workspace "$ws" --format=json 2>/dev/null | ws_repos | grep -c .)
-  ((n)) || die "no git repository one level below $ws"
+  json=$(gwm list --workspace "$ws" --format=json 2>/dev/null)
+  [[ -n $(ws_repos <<<"$json") ]] || die "no git repository one level below $ws"
+  n=$(ws_target_repos <<<"$json" | grep -c .)   # repos with a non-main worktree
   where="every non-main worktree of the $n repo(s) under $ws"
 fi
 

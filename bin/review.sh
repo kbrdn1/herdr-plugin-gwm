@@ -26,7 +26,7 @@ if [[ -n ${GWM_REVIEW_URL:-} ]]; then
 fi
 # Multi-repo mode: gwm review has no --workspace (gwm rejects it), and `gh pr
 # list` reads the cwd's remote — enter the repo first.
-ws=$(ws_root)
+ws=$(ws_root "$PWD")
 if [[ -n $ws ]]; then
   ws_enter_repo "$ws" "$url_repo"
   case $? in 0) ;; 1) exit 0 ;; *) die "no repo to review the PR in (see above)" ;; esac

@@ -13,7 +13,7 @@ die() { printf '\n\033[31m%s\033[0m press any key to close' "$1"; read -rn1; exi
 command -v fzf >/dev/null || die "fzf not found on PATH"
 
 herdr=$(herdr_bin)
-ws=$(ws_root)   # non-empty = multi-repo mode on that directory
+ws=$(ws_root "$PWD")   # non-empty = multi-repo mode on that directory
 wtjson=$(gwm list ${ws:+--workspace "$ws"} --format=json 2>/dev/null)
 [[ -z $wtjson || $wtjson == "[]" ]] && { printf '\033[33mNo worktrees.\033[0m\n'; sleep 2; exit 0; }
 

@@ -14,10 +14,11 @@ command -v gwm >/dev/null || die "gwm not found on PATH"
 
 # Multi-repo mode: report and delete across every repo below the workspace (the
 # confirmation says how many); per-repo profiles aren't offered there.
-ws=$(ws_root) where=''
+ws=$(ws_root "$PWD") where=''
 if [[ -n $ws ]]; then
-  n=$(gwm list --workspace "$ws" --format=json 2>/dev/null | ws_repos | grep -c .)
-  ((n)) || die "no git repository one level below $ws"
+  json=$(gwm list --workspace "$ws" --format=json 2>/dev/null)
+  [[ -n $(ws_repos <<<"$json") ]] || die "no git repository one level below $ws"
+  n=$(ws_target_repos <<<"$json" | grep -c .)   # repos with a non-main worktree
   where=" in the $n repo(s) under $ws"
 fi
 
