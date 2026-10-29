@@ -140,7 +140,7 @@ printf '%s\n' '#!/usr/bin/env bash' 'printf "%s\n" "$*" >>"$HSTUB_LOG"' \
 chmod +x "$hstub/herdr"
 (export HSTUB_LOG=$hstub/log HERDR_BIN_PATH=$hstub/herdr HERDR_PLUGIN_CONFIG_DIR=/nonexistent
  adopt_worktree "$wtdir" feat/x)
-check "adopt: root ws from worktree list" "worktree list --cwd $PWD" "$(sed -n 1p "$hstub/log")"
+check "adopt: herdr is asked about the TARGET's repo, not the caller's" "worktree list --cwd $wtdir" "$(sed -n 1p "$hstub/log")"
 check "adopt: worktree open --path under root ws" \
   "worktree open --workspace w1 --path $wtdir --label feat/x --focus" "$(sed -n 2p "$hstub/log")"
 : >"$hstub/log"; printf 'open_mode = "tab"\n' >"$hstub/config.toml"
@@ -158,7 +158,61 @@ check "adopt: tab mode in a popup takes the workspace from the context" \
  adopt_worktree "$wtdir" feat/x)
 check "adopt: the context wins over a stale HERDR_WORKSPACE_ID leaked from the server env" \
   "tab create --workspace w6 --cwd $wtdir --label feat/x --focus" "$(cat "$hstub/log")"
+# No workspace open on the target's repo yet: open from its main checkout (herdr
+# creates the repo workspace and groups the worktree under it), and only a
+# plain open when herdr can't even name that checkout.
+printf '%s\n' '#!/usr/bin/env bash' 'printf "%s\n" "$*" >>"$HSTUB_LOG"' \
+  '[[ "$1 $2" == "worktree list" ]] && printf %s "$HSTUB_LIST"' 'exit 0' >"$hstub/herdr"
+: >"$hstub/log"
+(export HSTUB_LOG=$hstub/log HERDR_BIN_PATH=$hstub/herdr HERDR_PLUGIN_CONFIG_DIR=/nonexistent \
+   HSTUB_LIST='{"result":{"source":{"source_checkout_path":"/r/acme-api","source_workspace_id":null},"worktrees":[]}}'
+ adopt_worktree "$wtdir" feat/x)
+check "adopt: no repo workspace yet → open from the repo's main checkout" \
+  "worktree open --cwd /r/acme-api --path $wtdir --label feat/x --focus" "$(sed -n 2p "$hstub/log")"
+: >"$hstub/log"
+(export HSTUB_LOG=$hstub/log HERDR_BIN_PATH=$hstub/herdr HERDR_PLUGIN_CONFIG_DIR=/nonexistent HSTUB_LIST='not json'
+ adopt_worktree "$wtdir" feat/x)
+check "adopt: herdr names no checkout → plain open" \
+  "worktree open --path $wtdir --label feat/x --focus" "$(sed -n 2p "$hstub/log")"
 rm -rf "$hstub" "$wtdir"
+
+# ws_root: multi-repo mode = a directory outside any git work tree.
+repo=$(mktemp -d); plain=$(mktemp -d); git init -q "$repo" 2>/dev/null; mkdir -p "$repo/sub"
+check "ws_root: inside a repo → single-repo mode (nothing)" "" "$(ws_root "$repo/sub")"
+check "ws_root: outside any repo → that directory" "$plain" "$(ws_root "$plain")"
+
+# Picker keys and rows, on a real `gwm list --workspace` capture (gwm 1.11) plus
+# a second repo reusing a worktree name.
+wsl=$(jq '. + [.[1] | .repo = "payments-svc" | .path = "/ws/payments-svc-fix"]' tests/fixtures/gwm-list-workspace.json)
+check "wt_row: repo/name key → that repo's row, even with the name in two repos" "/ws/payments-svc-fix" \
+  "$(wt_row payments-svc/fix-57-rate-limit-headers <<<"$wsl" | jq -r .path)"
+check "wt_row: … and the other repo's for its own key" "@ROOT@/worktrees/acme-api/fix-57-rate-limit-headers" \
+  "$(wt_row acme-api/fix-57-rate-limit-headers <<<"$wsl" | jq -r .path)"
+check "wt_row: single-repo rows are keyed by name" "@ROOT@/worktrees/acme-api/docs-71-openapi-examples" \
+  "$(wt_row docs-71-openapi-examples <tests/fixtures/gwm-list.json | jq -r .path)"
+check "wt_row: in multi-repo mode a bare name is no key" "" "$(wt_row fix-57-rate-limit-headers <<<"$wsl")"
+check "wt_row: unknown key → nothing" "" "$(wt_row acme-api/nope <<<"$wsl")"
+check "ws_repos: every repo with a main checkout" "acme-api payments-svc" \
+  "$(ws_repos <tests/fixtures/gwm-list-workspace.json | paste -sd' ' -)"
+check "ws_repo_main: the repo's main checkout" "@ROOT@/payments-svc/" \
+  "$(ws_repo_main payments-svc <tests/fixtures/gwm-list-workspace.json)"
+
+# remote_is_github_repo: local git config only.
+for url in https://github.com/Acme/Acme-API.git git@github.com:acme/acme-api ssh://git@github.com/acme/acme-api.git/; do
+  git -C "$repo" remote remove origin 2>/dev/null; git -C "$repo" remote add origin "$url"
+  check "remote_is_github_repo: $url" "yes" "$(remote_is_github_repo "$repo" acme/acme-api && echo yes)"
+done
+git -C "$repo" remote remove origin; git -C "$repo" remote add upstream https://github.com/acme/acme-api-v2.git
+git -C "$repo" remote add fork https://gitlab.com/acme/acme-api.git
+check "remote_is_github_repo: a longer name or another host is no match" "" \
+  "$(remote_is_github_repo "$repo" acme/acme-api && echo yes)"
+check "remote_is_github_repo: any remote counts (upstream of a fork)" "yes" \
+  "$(remote_is_github_repo "$repo" acme/acme-api-v2 && echo yes)"
+check "remote_is_github_repo: no remote at all → no" "" "$(remote_is_github_repo "$plain" acme/acme-api && echo yes)"
+rm -rf "$repo" "$plain"
+
+check "pr_repo_from_url: owner/name of a PR URL" "acme/acme-api" "$(pr_repo_from_url https://github.com/acme/acme-api/pull/7)"
+check "pr_repo_from_url: forged host → nothing" "" "$(pr_repo_from_url https://evil.com/acme/acme-api/pull/7)"
 
 # Source-level guardrail: no script may create a worktree on the herdr side.
 # Scan only existing dirs (bin/ arrives in phase 1) and skip comment lines — the

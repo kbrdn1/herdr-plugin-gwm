@@ -27,7 +27,14 @@ sed "s|@ROOT@|$S/root|g" tests/fixtures/herdr-pane-list.json >"$S/panes.json"
 cp tests/fixtures/gwm-types.txt "$S/types.txt"
 cp tests/fixtures/gh-pr-list.txt "$S/gh.txt"
 : >"$S/config-exec.txt"; : >"$S/config-clean.txt"
-jq -r '.[].path' "$S/list.json" | while read -r p; do mkdir -p "$p"; done
+# Every checkout is a git work tree (single-repo mode); $S/root itself is not,
+# so a pane on it is in multi-repo mode, served gwm-list-workspace.json.
+jq -r '.[].path' "$S/list.json" | while read -r p; do mkdir -p "$p" && git init -q "$p" 2>/dev/null; done
+sed "s|@ROOT@|$S/root|g" tests/fixtures/gwm-list-workspace.json >"$S/list-ws.json"
+mkdir -p "$S/root/payments-svc" && git init -q "$S/root/payments-svc" 2>/dev/null
+git -C "$S/root/acme-api" remote add origin https://github.com/acme/acme-api.git
+git -C "$S/root/payments-svc" remote add origin git@github.com:acme/payments-svc.git
+main_api=$(cd "$S/root/acme-api" && pwd) main_pay=$(cd "$S/root/payments-svc" && pwd)
 wt() { printf '%s' "$S/root/worktrees/acme-api/$1"; }
 caller=$(wt chore-63-bump-axum)   # panes run with --cwd = the invoking workspace
 
@@ -43,7 +50,9 @@ case $1 in
   config) # `config list --prefix <kind>.profiles`; empty files = a repo without profiles
     case " $* " in *" exec.profiles "*) cat "$STUB/config-exec.txt" ;; *" clean.profiles "*) cat "$STUB/config-clean.txt" ;; esac ;;
   bootstrap) cat >"$STUB/stdin.log" ;;   # what a trust prompt would read
-  list)  cat "$STUB/list.json" ;;
+  list)  # GWM_WS_EMPTY=1: a workspace root with no repo below it
+    if [[ " $* " != *" --workspace "* ]]; then cat "$STUB/list.json"
+    elif [[ ${GWM_WS_EMPTY:-} == 1 ]]; then echo '[]'; else cat "$STUB/list-ws.json"; fi ;;
   path)  jq -c --arg p "$2" '[.[] | select(.name | contains($p))][0] // empty | {name, path, branch}' "$STUB/list.json" ;;
   review) # gwm materializes review/pr-<N>-<author>-<slug>: mirror that in the list
     n=$2 name="review-pr-$2-alice-fix"; d=$STUB/root/worktrees/acme-api/$name; mkdir -p "$d"
@@ -92,12 +101,17 @@ exit 1
 EOF
 cat >"$S/bin/fzf" <<'EOF'
 #!/usr/bin/env bash
-in=$(cat); printf '%s\n' "$in" >"$STUB/fzf.in"   # the candidates the picker got
-grep -m1 -F -- "${FZF_PICK:-}" <<<"$in" || exit 1
+# FZF_PICK='a;b': the Nth picker of a run takes the Nth pattern (the last one
+# repeats); fzf.in = what the last picker got, fzf.in.N = the Nth one's.
+n=$(cat "$STUB/fzf.calls" 2>/dev/null || echo 0); n=$((n + 1)); echo "$n" >"$STUB/fzf.calls"
+IFS=';' read -ra picks <<<"${FZF_PICK:-}"; pick=${picks[n - 1]:-${picks[${#picks[@]} - 1]:-}}
+in=$(cat); printf '%s\n' "$in" >"$STUB/fzf.in"; cp "$STUB/fzf.in" "$STUB/fzf.in.$n"
+grep -m1 -F -- "$pick" <<<"$in" || exit 1
 EOF
 cat >"$S/bin/gh" <<'EOF'
 #!/usr/bin/env bash
 out=$(printf '%q ' gh "$@"); printf '%s\n' "${out% }" >>"$STUB/log"
+printf '%s\n' "$PWD" >>"$STUB/gh-cwd.log"
 [[ "$1 $2" == "pr list" ]] && cat "$STUB/gh.txt"
 exit 0
 EOF
@@ -115,7 +129,7 @@ unset FZF_DEFAULT_OPTS GWM_REVIEW_URL HERDR_PLUGIN_EVENT_JSON GWM_FAIL HERDR_FAI
 
 # run <script> <stdin> [cwd] — fresh logs, then $rc / $S/log / $S/cwd.log
 run() {
-  : >"$S/log"; : >"$S/cwd.log"; : >"$S/fzf.in"; rm -f "$S/pane.calls"
+  : >"$S/log"; : >"$S/cwd.log"; : >"$S/fzf.in"; rm -f "$S/pane.calls" "$S/fzf.calls" "$S"/fzf.in.*
   local cwd=${3:-$caller}
   local ctx; ctx=$(jq -cn --arg cwd "$cwd" --arg ws "${CTX_WS:-w7}" --arg tab "${CTX_TAB:-w7:t1}" \
     '{workspace_id: $ws, tab_id: $tab, workspace_cwd: $cwd, focused_pane_cwd: $cwd}')
@@ -129,8 +143,8 @@ lines() { printf '%s\n' "$@"; }
 FZF_PICK=fix-57 run switch.sh ""
 check "switch: not open → adopt under the root workspace" "$(lines \
   "$(q gwm list --format=json)" \
-  "$(q herdr worktree list --cwd "$caller")" \
-  "$(q herdr worktree list --cwd "$caller")" \
+  "$(q herdr worktree list --cwd "$(wt fix-57-rate-limit-headers)")" \
+  "$(q herdr worktree list --cwd "$(wt fix-57-rate-limit-headers)")" \
   "$(q herdr worktree open --workspace w1 --path "$(wt fix-57-rate-limit-headers)" --label 'fix/#57-rate-limit-headers' --focus)")" "$(calls)"
 
 # docs-71 is open in w9: neither the caller's workspace (w7) nor the root (w1).
@@ -158,20 +172,20 @@ cp "$S/list.idle" "$S/list.json"
 FZF_PICK=docs-71 run switch.sh ""
 check "switch: already open → focus ITS workspace" "$(lines \
   "$(q gwm list --format=json)" \
-  "$(q herdr worktree list --cwd "$caller")" \
+  "$(q herdr worktree list --cwd "$(wt docs-71-openapi-examples)")" \
   "$(q herdr workspace focus w9)")" "$(calls)"
 
 printf 'open_mode = "tab"\n' >"$S/config/config.toml"
 FZF_PICK=feat-42 run switch.sh ""
 check "switch: open_mode=tab, no tab on it yet → tab create in the caller's workspace" "$(lines \
   "$(q gwm list --format=json)" \
-  "$(q herdr worktree list --cwd "$caller")" \
+  "$(q herdr worktree list --cwd "$(wt feat-42-payment-webhooks)")" \
   "$(q herdr pane list)" \
   "$(q herdr tab create --workspace w7 --cwd "$(wt feat-42-payment-webhooks)" --label 'feat/#42-payment-webhooks' --focus)")" "$(calls)"
 FZF_PICK=fix-57 run switch.sh ""
 check "switch: open_mode=tab, a tab already only on it (w7:t2) → tab focus, no duplicate" "$(lines \
   "$(q gwm list --format=json)" \
-  "$(q herdr worktree list --cwd "$caller")" \
+  "$(q herdr worktree list --cwd "$(wt fix-57-rate-limit-headers)")" \
   "$(q herdr pane list)" \
   "$(q herdr tab focus w7:t2)")" "$(calls)"
 # The only tab of its workspace (w8, opened in fix-57/src) is still one to focus:
@@ -189,7 +203,7 @@ FZF_PICK=fix-57 run remove.sh "n"
 check "remove: N → preview + read-only herdr lookups, nothing removed or closed" "$(lines \
   "$(q gwm list --format=json)" \
   "$(q gwm remove fix-57-rate-limit-headers --dry-run)" \
-  "$(q herdr worktree list --cwd "$caller")" \
+  "$(q herdr worktree list --cwd "$(wt fix-57-rate-limit-headers)")" \
   "$(q herdr pane list)")" "$(calls)"
 check "remove: the preview shows gwm's resolution before the question" \
   "branch: fix/#57-rate-limit-headers" "$(grep -o 'branch: fix/#57-rate-limit-headers' "$S/out")"
@@ -208,7 +222,7 @@ FZF_PICK=docs-71 run remove.sh "y"
 check "remove: y → map reflections first, gwm remove (branch kept), close them" "$(lines \
   "$(q gwm list --format=json)" \
   "$(q gwm remove docs-71-openapi-examples --dry-run)" \
-  "$(q herdr worktree list --cwd "$caller")" \
+  "$(q herdr worktree list --cwd "$(wt docs-71-openapi-examples)")" \
   "$(q herdr pane list)" \
   "$(q herdr pane list)" \
   "$(q gwm remove docs-71-openapi-examples)" \
@@ -269,7 +283,7 @@ check "create: positional triple, resolved by issue, adopted" "$(lines \
   "$(q gwm types)" \
   "$(q gwm create fix 57 rate-limit-headers)" \
   "$(q gwm list --format=json)" \
-  "$(q herdr worktree list --cwd "$caller")" \
+  "$(q herdr worktree list --cwd "$(wt fix-57-rate-limit-headers)")" \
   "$adopt57")" "$(calls)"
 
 FZF_PICK=fix run create.sh $'57\n'
@@ -282,7 +296,7 @@ check "create: 057 resolves to issue 57 (numeric match)" "$(lines \
   "$(q gwm types)" \
   "$(q gwm create --issue 057 --type fix)" \
   "$(q gwm list --format=json)" \
-  "$(q herdr worktree list --cwd "$caller")" \
+  "$(q herdr worktree list --cwd "$(wt fix-57-rate-limit-headers)")" \
   "$adopt57")" "$(calls)"
 
 # No row carries issue 99: a typed desc falls back to `gwm path <desc>`.
@@ -292,7 +306,7 @@ check "create: no issue match → gwm path fallback on the typed desc" "$(lines 
   "$(q gwm create feat 99 payment-webhooks)" \
   "$(q gwm list --format=json)" \
   "$(q gwm path payment-webhooks --format=json)" \
-  "$(q herdr worktree list --cwd "$caller")" \
+  "$(q herdr worktree list --cwd "$(wt feat-42-payment-webhooks)")" \
   "$(q herdr worktree open --workspace w1 --path "$(wt feat-42-payment-webhooks)" --label 'feat/#42-payment-webhooks' --focus)")" "$(calls)"
 
 check "create: type picker = gwm types (no \"(source:\" footer), then the (auto) entry" \
@@ -303,7 +317,7 @@ check "create: auto → gwm create --issue N, type left to the issue's labels" "
   "$(q gwm types)" \
   "$(q gwm create --issue 57)" \
   "$(q gwm list --format=json)" \
-  "$(q herdr worktree list --cwd "$caller")" \
+  "$(q herdr worktree list --cwd "$(wt fix-57-rate-limit-headers)")" \
   "$adopt57")" "$(calls)"
 check "create: auto asks no description" "" "$(grep -o 'Description' "$S/out")"
 
@@ -328,7 +342,7 @@ GWM_REVIEW_DECOY=71 GWM_REVIEW_URL='https://github.com/o/r/pull/7' run review.sh
 check "review: link click → gwm review <N>, adopt PR 7's worktree (not the pr-71 decoy)" "$(lines \
   "$(q gwm review 7)" \
   "$(q gwm list --format=json)" \
-  "$(q herdr worktree list --cwd "$caller")" \
+  "$(q herdr worktree list --cwd "$(wt review-pr-7-alice-fix)")" \
   "$(q herdr worktree open --workspace w1 --path "$(wt review-pr-7-alice-fix)" --label review/pr-7-alice-fix --focus)")" "$(calls)"
 
 FZF_PICK=idempotency run review.sh ""
@@ -336,7 +350,7 @@ check "review: gh pr list picker → gwm review 9, adopt PR 9's worktree" "$(lin
   "$(q gh pr list --limit 50)" \
   "$(q gwm review 9)" \
   "$(q gwm list --format=json)" \
-  "$(q herdr worktree list --cwd "$caller")" \
+  "$(q herdr worktree list --cwd "$(wt review-pr-9-alice-fix)")" \
   "$(q herdr worktree open --workspace w1 --path "$(wt review-pr-9-alice-fix)" --label review/pr-9-alice-fix --focus)")" "$(calls)"
 check "review: picker path exits 0" "0" "$rc"
 
@@ -419,6 +433,69 @@ run clean.sh "n"
 check "clean: no profiles → report only on N" "$(lines "$cfg_clean" "$(q gwm clean)")" "$(calls)"
 run clean.sh "y"
 check "clean: y → report, then --yes" "$(lines "$cfg_clean" "$(q gwm clean)" "$(q gwm clean --yes)")" "$(calls)"
+
+# --- multi-repo mode (gwm --workspace) ----------------------------------------
+# A pane on $S/root (not a repo, repos one level below it): every listing goes
+# through `gwm list --workspace`, picker keys are repo/name, and the commands gwm
+# has no --workspace for run from the picked repo's main checkout.
+W=$S/root
+FZF_PICK=acme-api/fix-57 run switch.sh "" "$W"
+check "workspace: switch lists every repo, keyed repo/name" \
+  "acme-api/acme-api acme-api/fix-57-rate-limit-headers acme-api/docs-71-openapi-examples acme-api/chore-63-bump-axum acme-api/feat-42-payment-webhooks payments-svc/payments-svc" \
+  "$(awk '{print $1}' "$S/fzf.in" | paste -sd' ' -)"
+check "workspace: switch adopts under the TARGET repo's root workspace" "$(lines \
+  "$(q gwm list --workspace "$W" --format=json)" \
+  "$(q herdr worktree list --cwd "$(wt fix-57-rate-limit-headers)")" \
+  "$(q herdr worktree list --cwd "$(wt fix-57-rate-limit-headers)")" \
+  "$(q herdr worktree open --workspace w1 --path "$(wt fix-57-rate-limit-headers)" --label 'fix/#57-rate-limit-headers' --focus)")" "$(calls)"
+
+# Same worktree name in two repos: the picked repo's row, nothing else.
+cp "$S/list-ws.json" "$S/list-ws.orig"
+jq --arg d "$S/root/worktrees/payments-svc/fix-57-rate-limit-headers" \
+  '. + [.[1] | .repo = "payments-svc" | .path = $d | .branch = "fix/#57-retry"]' "$S/list-ws.orig" >"$S/list-ws.json"
+mkdir -p "$S/root/worktrees/payments-svc/fix-57-rate-limit-headers"
+FZF_PICK=payments-svc/fix-57 run remove.sh "y" "$W"
+check "workspace: remove never passes --workspace (gwm rejects it there)" "" "$(grep -F -- 'remove' "$S/log" | grep -F -- '--workspace')"
+check "workspace: remove resolves the picked repo's worktree, not the same name elsewhere" \
+  "$(q herdr worktree list --cwd "$S/root/worktrees/payments-svc/fix-57-rate-limit-headers")" "$(grep -F 'worktree list' "$S/log")"
+check "workspace: gwm remove runs from that repo's main checkout" "$(lines "$W" "$main_pay" "$main_pay")" "$(cat "$S/cwd.log")"
+check "workspace: … dry-run first, then the removal" "$(lines \
+  "$(q gwm remove fix-57-rate-limit-headers --dry-run)" "$(q gwm remove fix-57-rate-limit-headers)")" "$(grep '^gwm remove' "$S/log")"
+cp "$S/list-ws.orig" "$S/list-ws.json"
+
+FZF_PICK='payments-svc;fix' run create.sh $'57\nrate-limit-headers' "$W"
+check "workspace: create asks the repo first" "acme-api payments-svc" "$(paste -sd' ' "$S/fzf.in.1")"
+check "workspace: … then runs the usual flow in its main checkout" "$(lines \
+  "$(q gwm list --workspace "$W" --format=json)" "$(q gwm types)" "$(q gwm create fix 57 rate-limit-headers)")" "$(sed -n 1,3p "$S/log")"
+check "workspace: … every gwm call after the pick from there" "$(lines "$W" "$main_pay" "$main_pay" "$main_pay")" "$(cat "$S/cwd.log")"
+FZF_PICK=no-such-repo run create.sh "" "$W"   # fzf stub: no match = esc
+check "workspace: esc on the repo picker → nothing created" "$(q gwm list --workspace "$W" --format=json)" "$(calls)"
+check "workspace: … and a clean exit" "0" "$rc"
+
+: >"$S/gh-cwd.log"
+GWM_REVIEW_URL='https://github.com/Acme/payments-svc/pull/7' run review.sh "" "$W"
+check "workspace: a clicked PR lands in the repo whose remote is the URL's (no picker)" "$(lines \
+  "$(q gwm list --workspace "$W" --format=json)" "$(q gwm review 7)")" "$(sed -n 1,2p "$S/log")"
+check "workspace: … gwm review runs there" "$main_pay" "$(sed -n 2p "$S/cwd.log")"
+check "workspace: … nothing was asked" "" "$(cat "$S/fzf.in")"
+GWM_REVIEW_URL='https://github.com/other/payments-svc/pull/7' run review.sh "" "$W"
+check "workspace: a PR of no repo here → refused, gwm review never runs" "$(q gwm list --workspace "$W" --format=json)" "$(calls)"
+check "workspace: … exits 1" "1" "$rc"
+FZF_PICK='acme-api;idempotency' run review.sh "" "$W"
+check "workspace: gh pr list runs in the picked repo" "$main_api" "$(cat "$S/gh-cwd.log")"
+check "workspace: … and gwm review too" "$(q gwm review 9)" "$(grep '^gwm review' "$S/log")"
+
+run exec.sh $'git fetch\n' "$W"
+check "workspace: exec fans out with --workspace, no per-repo profile lookup" "$(lines \
+  "$(q gwm list --workspace "$W" --format=json)" "$(q gwm exec --workspace "$W" -- bash -c 'git fetch')")" "$(calls)"
+check "workspace: … the prompt says how many repos" "of the 2 repo(s) under" "$(grep -o 'of the 2 repo(s) under' "$S/out")"
+GWM_WS_EMPTY=1 run exec.sh $'git fetch\n' "$W"
+check "workspace: no repo below → exec refused, nothing runs" "$(q gwm list --workspace "$W" --format=json)" "$(calls)"
+
+run clean.sh "y" "$W"
+check "workspace: clean reports, then deletes, across the workspace" "$(lines \
+  "$(q gwm list --workspace "$W" --format=json)" "$(q gwm clean --workspace "$W")" "$(q gwm clean --workspace "$W" --yes)")" "$(calls)"
+check "workspace: … the confirmation says how many repos" "in the 2 repo(s) under" "$(grep -o 'in the 2 repo(s) under' "$S/out")"
 
 # --- worktree.created hook ---------------------------------------------------
 # herdr starts hooks in the plugin dir; gwm must run from the worktree itself.
