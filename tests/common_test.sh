@@ -48,6 +48,16 @@ check "wt_fzf drops FZF_DEFAULT_OPTS (clean)" "[]" \
   "$(FZF_DEFAULT_OPTS='--color=dark' PATH="$stub:$PATH" HERDR_PLUGIN_CONFIG_DIR=$tmp wt_fzf </dev/null)"
 rm -rf "$tmp" "$stub"
 
+# gwm_profiles: saved profiles out of a real `gwm config list` (trimmed to repo keys).
+check "profiles: exec → name<TAB>command, in gwm's order" "$(printf 'fmt\t["true"]\ntest\t["git", "status", "--short"]')" \
+  "$(gwm_profiles exec <tests/fixtures/gwm-config-list.txt)"
+check "profiles: clean → name<TAB>dirs" "$(printf 'deep\t["target", ".cache"]')" \
+  "$(gwm_profiles clean <tests/fixtures/gwm-config-list.txt)"
+check "profiles: none configured → nothing" "" "$(printf 'merge_method = "merge"\n' | gwm_profiles exec)"
+check "profiles: a quoted/dotted key is skipped, not misread" "" \
+  "$(printf 'exec.profiles."a.b".command = ["x"]\n' | gwm_profiles exec)"
+check "profiles: unknown kind → nothing" "" "$(gwm_profiles nope <tests/fixtures/gwm-config-list.txt)"
+
 # pr_number_from_url: valid
 check "pr url valid" "42" "$(pr_number_from_url 'https://github.com/o/r/pull/42')"
 # pr_number_from_url: rejects non-PR / wrong host / trailing path

@@ -142,6 +142,18 @@ adopt_worktree() {
   exec "$herdr" worktree open --path "$path" --label "$label" --focus
 }
 
+# Saved profiles out of `gwm config list` on stdin, one "<name><TAB><what>" per
+# profile: exec → its command, clean → its dirs. That output is gwm's human text,
+# outside its JSON contract: whatever isn't recognised yields no profile, and the
+# caller falls back to its plain prompt. ponytail: names are matched as
+# [A-Za-z0-9_-]+, a dotted/quoted TOML key is skipped (no profile, never a wrong
+# one). Pure/testable.   $1 = exec | clean
+gwm_profiles() {
+  local key
+  case ${1:-} in exec) key='command' ;; clean) key='dirs' ;; *) return 0 ;; esac
+  sed -n "s/^$1\.profiles\.\([A-Za-z0-9_-]*\)\.$key = \(.*\)\$/\1"$'\t'"\2/p"
+}
+
 # Extract the PR number from a GitHub PR URL, strictly validated. Prints nothing
 # and returns 1 for any non-conforming URL — the link_handler guardrail: pass the
 # NUMBER to `gwm review`, never a raw/forged URL.

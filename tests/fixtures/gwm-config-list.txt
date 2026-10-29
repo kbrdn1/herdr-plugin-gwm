@@ -1,0 +1,12 @@
+bootstrap.copy[0].from = ".env"
+bootstrap.copy[0].required = false
+bootstrap.copy[0].to = ".env"
+clean.profiles.deep.dirs = ["target", ".cache"]
+doctor.trunks = ["dev", "main"]
+exec.profiles.fmt.command = ["true"]
+exec.profiles.fmt.jobs = 4
+exec.profiles.test.command = ["git", "status", "--short"]
+merge_method = "merge"
+worktree.base = "{repo_parent}/{repo}-worktrees"
+worktree.branch_pattern = "{type}/#{issue}-{desc}"
+worktree.path_pattern = "{type}-{issue}-{desc}"
