@@ -25,3 +25,7 @@ jobs:
 
       - name: tests
         run: bash tests/common_test.sh
+
+      # bin/*.sh against stub gwm/herdr/fzf/gh (the runner's real gh is shadowed).
+      - name: script tests
+        run: bash tests/scripts_test.sh
