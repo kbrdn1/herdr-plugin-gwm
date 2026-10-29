@@ -93,7 +93,7 @@ unset FZF_DEFAULT_OPTS GWM_REVIEW_URL HERDR_PLUGIN_EVENT_JSON GWM_FAIL
 
 # run <script> <stdin> [cwd] — fresh logs, then $rc / $S/log / $S/cwd.log
 run() {
-  : >"$S/log"; : >"$S/cwd.log"
+  : >"$S/log"; : >"$S/cwd.log"; : >"$S/fzf.in"
   local cwd=${3:-$caller}
   (cd "$cwd" && HERDR_PLUGIN_CONTEXT_JSON="{\"workspace_cwd\":\"$cwd\"}" bash "$root/bin/$1" <<<"$2") >"$S/out" 2>&1
   rc=$?

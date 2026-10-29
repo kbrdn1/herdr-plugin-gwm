@@ -118,7 +118,7 @@ As long as that holds there is exactly one source of truth (gwm). Break it and h
 
 ## how it works
 
-Glue-only bash. Each script is `gwm <cmd> --format=json` → transform with `jq` → `$HERDR_BIN_PATH <cmd>`. No business logic is duplicated; the plugin rides gwm's frozen 1.0 JSON contract, so the surface is stable by design. The one exception is the agent badge, read from the optional, experimental `agents` field; a missing or reshaped field only drops the badge.
+Glue-only bash. Each script is `gwm <cmd> --format=json` → transform with `jq` → `$HERDR_BIN_PATH <cmd>`. No business logic is duplicated; the plugin rides gwm's frozen 1.0 JSON contract, so the surface is stable by design. Two reads sit outside that contract: the type picker parses `gwm types`' human output (its first column, minus the `(source: …)` footer), and the agent badge reads the optional, experimental `agents` field (a missing or reshaped field only drops the badge).
 
 ```
 gwm create <type> <issue> <desc>          # gwm owns creation

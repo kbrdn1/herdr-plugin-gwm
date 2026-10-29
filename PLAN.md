@@ -238,9 +238,10 @@ adopt_worktree "$path" "$branch"               # → herdr worktree open --path 
   comme l'a fait jj-workspace. Rung le plus bas qui tient.
 - **Glue-only** : chaque script = `gwm <cmd> [--format=json]` → transforme →
   `$HERDR_BIN_PATH <cmd>`. Zéro logique métier dupliquée. On bâtit sur le
-  contrat json gelé 1.0 de gwm → surface stable par design. Seule exception :
-  le badge d'agent lit le champ `agents`, tier expérimental ; absent ou de
-  forme inattendue, il ne fait que disparaître.
+  contrat json gelé 1.0 de gwm → surface stable par design. Deux lectures hors
+  contrat : le picker de types parse la sortie texte de `gwm types` (1re colonne,
+  sans le pied `(source: …)`), et le badge d'agent lit le champ `agents`, tier
+  expérimental (absent ou de forme inattendue, il ne fait que disparaître).
 - **open_mode configurable** (comme worktrunk) dans
   `$HERDR_PLUGIN_CONFIG_DIR/config.toml` :
   - `workspace` (défaut) → `herdr worktree open --path` : le worktree apparaît
