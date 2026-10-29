@@ -274,7 +274,7 @@ macos/linux.
 
 ## 4. Plan d'implémentation phasé (MVP d'abord)
 
-> **Statut (`dev`, manifest 0.2.0)** : phases 1-4 **implémentées** (create/switch/remove/review/exec/clean/dashboard + link_handler PR + event `worktree.created`, opérant depuis la PR #7). Mode multi-repo `gwm --workspace` câblé (issue #18). Reliquat : le hook post-create `.gwm.toml` (sens gwm → herdr sans plugin, phase 3) n'est pas documenté. La voie sans plugin documentée est `gwm herdr` (onglet / pane).
+> **Statut (`dev`, manifest 0.2.0)** : phases 1-4 **implémentées** (create/switch/remove/review/exec/clean/dashboard + link_handler PR + event `worktree.created`, opérant depuis la PR #7). Mode multi-repo `gwm --workspace` câblé (issue #18). Le sens gwm → herdr sans plugin est documenté : un hook `post_create` dans `.gwm.toml` (workspace groupé, issue #20), ou `gwm herdr` (onglet / pane).
 
 ### Phase 1 — MVP : create / switch / remove
 - [x] `herdr-plugin.toml` : métadonnées + actions `create`/`switch`/`remove`
@@ -328,9 +328,12 @@ macos/linux.
 - [x] `[[events]] on = "worktree.created"` → `gwm bootstrap` sur
       `.data.worktree.path`, lancé **depuis** le worktree (le hook démarre dans
       le dossier du plugin). Inopérant jusqu'à la PR #7 (mauvais champ + mauvais cwd).
-- [ ] **sens gwm → herdr sans plugin** : un hook post-create dans `.gwm.toml`
-      (`herdr worktree open --path <path>`) suffirait. Pas documenté. Depuis
-      gwm 1.10, `gwm herdr` couvre le besoin onglet/pane sans plugin.
+- [x] **sens gwm → herdr sans plugin** : recette `[[hooks.post_create]]` dans le
+      README (§ « without the plugin »), même logique qu'`adopt_worktree` (root
+      workspace, sinon `--cwd` du checkout principal), gardée par
+      `env_eq:HERDR_ENV=1`. Validée contre gwm 1.11 avec un herdr stubbé ; le
+      script de la recette est rejoué par `tests/scripts_test.sh`. `gwm herdr`
+      (≥ 1.10) reste la voie onglet/pane.
 
 ### Phase 4 — vue live & ops
 - [x] pane `dashboard` (placement `zoomed`) : lance le TUI gwm tel quel. Une vue
