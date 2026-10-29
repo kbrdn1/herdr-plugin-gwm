@@ -342,7 +342,8 @@ chaque PR et sur push `dev`/`main`. Le shellcheck du runner (0.9.0 sur
 ubuntu-latest) peut remonter ce qu'un 0.11 local ne voit plus (SC2119).
 
 `tests/scripts_test.sh` (CI aussi) lance chaque `bin/*.sh` avec des stubs
-`gwm` / `herdr` / `fzf` / `gh` en tête du `PATH`, nourris de fixtures tirées de
+`gwm` / `fzf` / `gh` en tête du `PATH` et un herdr joignable seulement via
+`$HERDR_BIN_PATH` (un `herdr` nu tombe sur un piège), nourris de fixtures tirées de
 vraies sorties gwm 1.11 (`tests/fixtures/`, chemins réécrits ; le `worktree list`
 herdr suit le schéma v0.9.5), et vérifie l'argv exact envoyé à gwm et à herdr.
 
