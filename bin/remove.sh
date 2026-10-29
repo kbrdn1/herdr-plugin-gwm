@@ -44,7 +44,7 @@ printf '%s\n\n' "$preview"
 # workspace, and the tabs elsewhere whose panes all sit inside it.
 wsid=$("$herdr" worktree list --cwd "$PWD" 2>/dev/null | herdr_ws_id_for_path "$path")
 panes=$("$herdr" pane list 2>/dev/null)
-tabs=$(herdr_tabs_for_path "$path" "$wsid" <<<"$panes")
+tabs=$(herdr_closable_tabs "$path" "$wsid" <<<"$panes")
 if [[ -n $wsid || -n $tabs ]]; then
   # Agents running there die with their pane: say so before the question.
   agents=$(jq -r --arg ws "$wsid" --arg tabs "$tabs" '
@@ -79,7 +79,7 @@ printf '\033[32m✓ removed %s\033[0m\n' "$name"
 # tab (our own tab, or the removed worktree's workspace) is closed LAST. A tab
 # herdr refuses to close (e.g. confirmation_required on a worktree group) is
 # left, and reported long enough to be read.
-own_tab=${HERDR_TAB_ID:-} own_ws=${HERDR_WORKSPACE_ID:-} last=() kept=0
+own_tab=${HERDR_TAB_ID:-$(ctx_field tab_id)} own_ws=${HERDR_WORKSPACE_ID:-$(ctx_field workspace_id)} last=() kept=0
 close() { "$herdr" "$@" >/dev/null 2>&1 || kept=$((kept + 1)); }
 while read -r tab; do
   [[ -z $tab ]] && continue
