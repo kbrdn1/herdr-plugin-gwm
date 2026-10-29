@@ -156,18 +156,20 @@ Champs absents = non fournis pour cette invocation. En bash : `jq -r '.workspace
 - `HERDR_PLUGIN_CONFIG_DIR` : config user éditable (`.env`, `config.toml`).
 - `HERDR_PLUGIN_STATE_DIR` : état runtime local.
 
-### 1.8 Commandes herdr qu'on va consommer (via `$HERDR_BIN_PATH`)
+### 1.8 Commandes herdr consommées (via `$HERDR_BIN_PATH`)
 
 ```
-herdr worktree open --path PATH --label TEXT --focus            # ADOPTER (jamais --branch)
-herdr worktree list [--cwd PATH]                                 # mapping path -> open_workspace_id (JSON)
-herdr workspace create --cwd PATH --label TEXT --focus           # alt. au worktree open (mode workspace top-level)
-herdr workspace close <workspace_id>                             # fermer le reflet après gwm remove (worktree lié : pas de --group, réservé au primaire depuis 0.9.0)
-herdr tab create --workspace ID --cwd PATH --label TEXT --focus  # mode léger (open_mode=tab)
-herdr pane run <pane_id> <command>                               # envoyer une cmd dans un shell interactif
-herdr pane list / pane close                                     # nettoyage panes orphelins
-herdr plugin pane open --plugin ID --entrypoint ID --placement split --cwd PATH --focus
+herdr worktree open [--workspace ROOT] --path PATH --label TEXT --focus  # ADOPTER (jamais --branch)
+herdr worktree list --cwd PATH                                    # root ws + mapping path -> open_workspace_id (JSON)
+herdr workspace focus <workspace_id>                              # switch : déjà reflété → focus
+herdr workspace close <workspace_id>                              # fermer le reflet après gwm remove (worktree lié : pas de --group, réservé au primaire depuis 0.9.0)
+herdr tab create [--workspace ID] --cwd PATH --label TEXT --focus # mode léger (open_mode=tab)
+herdr plugin pane open --plugin ID --entrypoint ID [--placement split|zoomed --direction down] --cwd PATH [--env K=V] --focus
 ```
+
+Non utilisées (écartées) : `workspace create` (un workspace top-level non
+groupé, cf. README « plugin or gwm herdr? »), `pane run` / `pane list` /
+`pane close` (aucun nettoyage de panes à faire).
 
 ### 1.9 CLI de gestion du plugin (dev loop)
 
@@ -221,7 +223,7 @@ Flux create réel (`bin/create.sh`) :
 ```bash
 gwm create "$type" "$issue" "$desc"            # ou, desc vide : gwm create --issue "$issue" --type "$type"
 row=$(gwm list --format=json | jq -c --arg i "$issue" 'map(select((.issue|tostring) == $i)) | last // empty')
-# repli si aucune ligne ne porte l'issue : gwm path "$desc" --format=json
+# repli (desc saisie seulement) si aucune ligne ne porte l'issue : gwm path "$desc" --format=json
 adopt_worktree "$path" "$branch"               # → herdr worktree open --path … (jamais --branch)
 ```
 
@@ -240,7 +242,7 @@ adopt_worktree "$path" "$branch"               # → herdr worktree open --path 
   - `workspace` (défaut) → `herdr worktree open --path` : le worktree apparaît
     comme worktree workspace nested dans la sidebar. C'est le bon match (les
     worktrees gwm sont de vrais git worktrees liés au repo).
-  - `tab` → `herdr tab create --cwd` + `gwm` dans le shell : plus léger.
+  - `tab` → `herdr tab create --cwd` (un shell dans le worktree, rien n'y est lancé) : plus léger.
 
 ### Prérequis runtime
 herdr ≥ 0.7.4 (panes popup) · `gwm` sur PATH (≥ 1.10 pour `create --issue`,
@@ -251,7 +253,7 @@ macos/linux.
 
 ## 4. Plan d'implémentation phasé (MVP d'abord)
 
-> **Statut (`dev`, manifest 0.2.0)** : phases 1-4 **implémentées** (create/switch/remove/review/exec/clean/dashboard + link_handler PR + event `worktree.created`, opérant depuis la PR #7). Reliquats : le mode multi-repo `gwm --workspace` n'est pas câblé, et le sens gwm → herdr sans plugin (phase 3) n'est pas documenté.
+> **Statut (`dev`, manifest 0.2.0)** : phases 1-4 **implémentées** (create/switch/remove/review/exec/clean/dashboard + link_handler PR + event `worktree.created`, opérant depuis la PR #7). Reliquats : le mode multi-repo `gwm --workspace` n'est pas câblé, et le hook post-create `.gwm.toml` (sens gwm → herdr sans plugin, phase 3) n'est pas documenté. La voie sans plugin documentée est `gwm herdr` (onglet / pane).
 
 ### Phase 1 — MVP : create / switch / remove
 - [x] `herdr-plugin.toml` : métadonnées + actions `create`/`switch`/`remove`
