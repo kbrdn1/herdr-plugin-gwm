@@ -384,7 +384,7 @@ check "exec: jobs is digits only (no injection)" "$(q gwm config list)" "$(calls
 
 # With profiles ([exec.profiles.*] / [clean.profiles.*]): picked from a list.
 cp tests/fixtures/gwm-config-list.txt "$S/config.txt"
-FZF_PICK=test run exec.sh ""
+FZF_PICK='test' run exec.sh ""
 check "exec: picker = typed command first, then each profile and its command" \
   "$(printf '(type a command)\nfmt\t["true"]\ntest\t["git", "status", "--short"]')" "$(cat "$S/fzf.in")"
 check "exec: a picked profile → gwm exec --profile <name>" "$(q gwm exec --profile test)" "$(tail -n1 "$S/log")"

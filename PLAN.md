@@ -373,7 +373,9 @@ Pas de `[[build]]` (bash, rien à compiler) → `plugin link` marche direct, et
   pane sans cwd = dehors ; la version fermable ne vide jamais un workspace),
 - `ctx_field` (workspace / tab de l'appelant : un popup ne reçoit ni
   `HERDR_WORKSPACE_ID` ni `HERDR_TAB_ID`),
-- `gwm_profiles` (profils exec/clean d'un vrai `gwm config list`, clé pointée ignorée),
+- `gwm_profiles` (profils exec/clean d'un vrai `gwm config list` ; clés vide, à
+  tiret initial ou pointées ignorées ; valeur multi-ligne `"""…"""` sautée en bloc,
+  ses lignes de continuation ne sont jamais lues comme des clés),
 - `event_worktree_path` sur une enveloppe herdr complète (forme plate rejetée),
 - `adopt_worktree` contre un `HERDR_BIN_PATH` stub qui journalise son argv,
 - le garde-fou : aucun chemin de code n'émet `worktree create` / `--branch`.

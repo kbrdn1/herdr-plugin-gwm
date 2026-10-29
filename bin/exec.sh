@@ -31,8 +31,9 @@ else
   run=(--profile "$pick") shown="--profile $pick"
 fi
 
-# 2. bounded parallelism — empty keeps gwm's default (sequential with live output,
-#    or the profile's own `jobs`); N > 1 prints each worktree's output as a block.
+# 2. bounded parallelism — empty leaves it to gwm (`--jobs` > the profile's `jobs`
+#    > `[exec] jobs` > sequential with live output); N > 1 prints each
+#    worktree's output as a block.
 printf 'Parallel jobs (empty = default): '; read -r jobs
 [[ -z $jobs || $jobs =~ ^[1-9][0-9]*$ ]] || die "jobs must be a positive number: $jobs"
 
