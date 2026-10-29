@@ -474,7 +474,7 @@ check "workspace: … and a clean exit" "0" "$rc"
 
 : >"$S/gh-cwd.log"
 GWM_REVIEW_URL='https://github.com/Acme/payments-svc/pull/7' run review.sh "" "$W"
-check "workspace: a clicked PR lands in the repo whose remote is the URL's (no picker)" "$(lines \
+check "workspace: a clicked PR lands in the repo whose origin is the URL's (no picker)" "$(lines \
   "$(q gwm list --workspace "$W" --format=json)" "$(q gwm review 7)")" "$(sed -n 1,2p "$S/log")"
 check "workspace: … gwm review runs there" "$main_pay" "$(sed -n 2p "$S/cwd.log")"
 check "workspace: … nothing was asked" "" "$(cat "$S/fzf.in")"
@@ -485,10 +485,14 @@ FZF_PICK='acme-api;idempotency' run review.sh "" "$W"
 check "workspace: gh pr list runs in the picked repo" "$main_api" "$(cat "$S/gh-cwd.log")"
 check "workspace: … and gwm review too" "$(q gwm review 9)" "$(grep '^gwm review' "$S/log")"
 
-run exec.sh $'git fetch\n' "$W"
+run exec.sh $'git fetch\n\ny' "$W"
 check "workspace: exec fans out with --workspace, no per-repo profile lookup" "$(lines \
   "$(q gwm list --workspace "$W" --format=json)" "$(q gwm exec --workspace "$W" -- bash -c 'git fetch')")" "$(calls)"
-check "workspace: … the prompt counts the repos it runs in (payments-svc has only main)" "of the 1 repo(s) under" "$(grep -o 'of the [0-9]* repo(s) under' "$S/out")"
+check "workspace: … the prompt counts the repos it runs in (payments-svc has only main)" "of the 1 repo(s) under" "$(grep -o -m1 'of the [0-9]* repo(s) under' "$S/out" | head -n1)"
+run exec.sh $'git fetch\n\nn' "$W"
+check "workspace: exec asks before fanning out (N → nothing runs)" "$(q gwm list --workspace "$W" --format=json)" "$(calls)"
+check "workspace: … the question names the scope" "Run it in every non-main worktree of the 1 repo(s) under" \
+  "$(grep -o 'Run it in every non-main worktree of the [0-9]* repo(s) under' "$S/out")"
 GWM_WS_EMPTY=1 run exec.sh $'git fetch\n' "$W"
 check "workspace: no repo below → exec refused, nothing runs" "$(q gwm list --workspace "$W" --format=json)" "$(calls)"
 
