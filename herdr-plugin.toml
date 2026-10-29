@@ -13,8 +13,8 @@ platforms = ["macos", "linux"]
 #
 # Placement lives in [[panes]]: `pane open --placement` OVERRIDES the entrypoint's,
 # while an omitted --width/--height falls back to the manifest's (herdr ≥ 0.7.4;
-# the parser takes both flags even though `--help` doesn't list them, and rejects
-# them for a non-popup placement). So the popup actions pass no --placement and
+# the parser takes both flags even though `--help` doesn't list them; the server
+# rejects them for a non-popup placement). So the popup actions pass no --placement and
 # keep the size declared once, on the entrypoint. Pick-and-go pickers are popups
 # (0.7.4+); panes whose OUTPUT is the
 # point (exec, clean) or that run long git/network work (create, review) stay

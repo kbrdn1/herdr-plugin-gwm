@@ -71,8 +71,9 @@ herdr_ws_id_for_path() {
 
 # Extract the worktree path from a herdr event payload (HERDR_PLUGIN_EVENT_JSON).
 # herdr passes the serialized event envelope, same shape from 0.7.4 to 0.9.5:
-#   {"event":"worktree.created","data":{"type":"worktree_created",
+#   {"event":"worktree_created","data":{"type":"worktree_created",
 #    "workspace":{…},"worktree":{"path":…,"branch":…}}}
+# (`event` is snake_case here; the dotted name is in $HERDR_PLUGIN_EVENT.)
 # Pure/testable.   $1 = event json
 event_worktree_path() {
   local json=${1:-}

@@ -116,9 +116,13 @@ inconnu donne un warning `unknown event` au link.
 0.9.5 — le chemin est dans `.data.worktree.path` :
 
 ```json
-{"event":"worktree.created","data":{"type":"worktree_created",
+{"event":"worktree_created","data":{"type":"worktree_created",
  "workspace":{…},"worktree":{"path":"…","branch":"…","open_workspace_id":"…",…}}}
 ```
+
+⚠️ Dans le JSON, `event` est en snake_case (`worktree_created`, `EventKind` en
+`rename_all = "snake_case"`). Le nom pointé du manifest (`worktree.created`)
+n'arrive que par `HERDR_PLUGIN_EVENT`.
 
 Les hooks tournent avec le **dossier du plugin** comme cwd : tout outil qui
 découvre son repo depuis le cwd (gwm) doit être lancé depuis le worktree visé.
