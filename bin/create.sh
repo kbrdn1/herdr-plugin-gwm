@@ -2,7 +2,7 @@
 # gwm: create a worktree, then adopt it into herdr. gwm is the source of truth
 # (see PLAN.md §0) — this script only ADOPTS what gwm produced.
 #
-# Flow: pick branch type (fzf over `gwm types`, or `(auto)`) → issue → desc (empty
+# Flow: (multi-repo mode: pick the repo) → pick branch type (fzf over `gwm types`, or `(auto)`) → issue → desc (empty
 #       = from the issue title; not asked with `(auto)`) → `gwm create` → resolve
 #       the new worktree → adopt via lib/common.sh::adopt_worktree.
 # No `set -e`: fzf esc (130) and empty picks are normal exits handled by hand.
@@ -15,6 +15,14 @@ source "$plugin_root/lib/common.sh"
 die() { printf '\n\033[31m%s\033[0m press any key to close' "$1"; read -rn1; exit 1; }
 
 command -v gwm >/dev/null || die "gwm not found on PATH"
+
+# 0. multi-repo mode: the worktree goes to ONE repo, whose types and .gwm.toml
+#    are its own — run the whole flow from its main checkout.
+ws=$(ws_root "$PWD")
+if [[ -n $ws ]]; then
+  ws_enter_repo "$ws"
+  case $? in 0) ;; 1) exit 0 ;; *) die "no repo to create the worktree in (see above)" ;; esac
+fi
 
 # 1. branch type — fzf over `gwm types` first column (its "(source: …)" footer is
 #    not a type), then the `(auto)` entry: no type at all, gwm reads it off the
