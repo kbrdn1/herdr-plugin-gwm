@@ -70,6 +70,12 @@ case $ans in
   *)    printf 'cancelled\n'; exit 0 ;;
 esac
 
+# The answer can come much later: re-read now, while the path still exists (once
+# removed, a pane's reported cwd may change, e.g. "… (deleted)" on Linux), and
+# close only tabs that were announced AND are still closable — a tab that kept
+# another workspace alive may have gone meanwhile.
+fresh=$("$herdr" pane list 2>/dev/null | herdr_closable_tabs "$path" "$wsid")
+
 # ${del:+…}: no empty argument, and no empty-array expansion (bash 3.2 + set -u).
 gwm remove "$name" ${del:+"$del"} || die "gwm remove failed (see above)"
 printf '\033[32m✓ removed %s\033[0m\n' "$name"
@@ -81,16 +87,19 @@ printf '\033[32m✓ removed %s\033[0m\n' "$name"
 # left, and reported long enough to be read.
 own_tab=${HERDR_TAB_ID:-$(ctx_field tab_id)} own_ws=${HERDR_WORKSPACE_ID:-$(ctx_field workspace_id)} last=() kept=0
 close() { "$herdr" "$@" >/dev/null 2>&1 || kept=$((kept + 1)); }
+report() {
+  printf '\033[33m%s reflection(s) left open on the removed path (herdr refused, or no longer safe to close)\033[0m\n' "$1"
+  sleep 3
+}
 while read -r tab; do
   [[ -z $tab ]] && continue
+  grep -Fxq -- "$tab" <<<"$fresh" || { kept=$((kept + 1)); continue; }
   if [[ $tab == "$own_tab" ]]; then last+=(tab close "$tab"); else close tab close "$tab"; fi
 done <<<"$tabs"
 if [[ -n $wsid ]]; then
   if [[ $wsid == "$own_ws" ]]; then last=(workspace close "$wsid"); else close workspace close "$wsid"; fi
 fi
-if ((kept)); then
-  printf '\033[33m%s reflection(s) herdr would not close: left open on the removed path\033[0m\n' "$kept"
-  sleep 3
-fi
-((${#last[@]})) && "$herdr" "${last[@]}"
+((kept)) && report "$kept"
+# Success ends this popup; a refusal leaves us alive to say so.
+if ((${#last[@]})) && ! "$herdr" "${last[@]}" >/dev/null 2>&1; then report 1; fi
 exit 0
