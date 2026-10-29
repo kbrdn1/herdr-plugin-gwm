@@ -67,13 +67,13 @@ wtlist2='{"result":{"worktrees":[{"path":"/repo/wt/b"}]}}'
 check "ws id: present but not open is empty" "" \
   "$(printf '%s' "$wtlist2" | herdr_ws_id_for_path '/repo/wt/b')"
 
-# event_worktree_path: pulls the path from an event payload, tolerating the
-# field name (.worktree.path / .path / .cwd), empty for none.
-check "event path from .worktree.path" "/wt/a" \
-  "$(event_worktree_path '{"worktree":{"path":"/wt/a"}}')"
-check "event path from .path" "/wt/b" "$(event_worktree_path '{"path":"/wt/b"}')"
-check "event path from .cwd" "/wt/c" "$(event_worktree_path '{"cwd":"/wt/c"}')"
-check "event path empty when absent" "" "$(event_worktree_path '{"foo":1}')"
+# event_worktree_path: hooks get the full event envelope (EventEnvelope serialized
+# by herdr, shape taken from its 0.9.5 source); the path is .data.worktree.path.
+# The old top-level guesses (.worktree.path/.path/.cwd) never matched it.
+evt='{"event":"worktree.created","data":{"type":"worktree_created","workspace":{"workspace_id":"w3","label":"x"},"worktree":{"path":"/wt/a","branch":"feat/x","is_bare":false,"is_detached":false,"is_prunable":false,"is_linked_worktree":true,"open_workspace_id":"w3","label":"x"}}}'
+check "event path from .data.worktree.path" "/wt/a" "$(event_worktree_path "$evt")"
+check "event path empty when absent" "" "$(event_worktree_path '{"event":"worktree.created","data":{}}')"
+check "event path empty on empty payload" "" "$(event_worktree_path '')"
 
 # Source-level guardrail: no script may create a worktree on the herdr side.
 # Scan only existing dirs (bin/ arrives in phase 1) and skip comment lines — the
