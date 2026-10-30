@@ -127,7 +127,7 @@ exit 1
 
 - **When it runs.** gwm runs `post_create` through `sh -c` inside the new worktree, with `GWM_PATH`, `GWM_BRANCH` and the rest of its context in the environment. The `when` guard keeps it to herdr panes: herdr exports `HERDR_ENV=1` and `HERDR_BIN_PATH` to every pane, so herdr doesn't even need to be on `PATH`. It also runs for `gwm review --bootstrap`; a plain `gwm review` runs no hooks.
 - **Trust.** A hook is repo-supplied code, so it puts `gwm create` behind gwm's TOFU prompt even in a repo that bootstraps nothing, and editing `.gwm.toml` (adding this block included) asks again, since trust is keyed on the file's hash.
-- **With the plugin as well.** `gwm.create` adopts after `gwm create` returns, so the worktree is opened twice. That's harmless: herdr answers an already-open checkout by focusing its workspace, without making a second one.
+- **With the plugin as well.** The plugin's panes are herdr panes too, so the hook also fires under `gwm.create`, which then adopts on its own. In the default `open_mode = "workspace"` that's harmless: the second `worktree open` finds the checkout already open and herdr just focuses its workspace. In `open_mode = "tab"` it isn't: the plugin adds a tab (`tab create`, which herdr doesn't deduplicate) next to the workspace the hook just opened, so every create leaves both. Use one or the other there.
 - **What it doesn't do.** Removal isn't mirrored: after a plain `gwm remove`, close the workspace in herdr yourself (the plugin's `gwm.remove` does it). `on_fail = "warn"` means a herdr that refuses the open leaves the worktree created, with a warning.
 
 ## configuration
